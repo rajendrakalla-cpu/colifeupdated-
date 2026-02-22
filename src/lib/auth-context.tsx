@@ -92,8 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...headers },
             body: JSON.stringify(data),
-        }).then(r => {
-            if (!r.ok) throw new Error('Registration failed');
+        }).then(async r => {
+            if (!r.ok) {
+                const errorData = await r.json().catch(() => ({}));
+                throw new Error(errorData.message || 'Registration failed');
+            }
             return r.json();
         });
 

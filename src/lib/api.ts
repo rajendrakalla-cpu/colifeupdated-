@@ -98,3 +98,11 @@ export const notificationsApi = {
     markRead: (id: string) => api.patch<void>(`/api/v1/notifications/${id}/read`),
     markAllRead: () => api.patch<void>('/api/v1/notifications/read-all'),
 };
+
+// ─── AI API ───
+export const aiApi = {
+    getRecommendations: (limit = 10) => api.get<any[]>(`/api/v1/ai/recommendations?limit=${limit}`),
+    getSuggestedPrice: (roomId: string) => api.get<any>(`/api/v1/ai/pricing/${roomId}`),
+    applySuggestedPrice: (roomId: string) => api.post<any>(`/api/v1/ai/pricing/${roomId}/apply`),
+    getCompatibility: (u1: string, u2: string) => api.get<any>(`/api/v1/ai/compatibility?userId1=${u1}&userId2=${u2}`),
+};
