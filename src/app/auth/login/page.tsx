@@ -40,8 +40,13 @@ export default function LoginPage() {
                     window.location.href = '/auth/register';
                 } else {
                     // Redirect based on role
-                    const role = user.role || 'tenant';
-                    window.location.href = `/dashboard/${role}`;
+                    const roleMap: Record<string, string> = {
+                        'OWNER': 'owner',
+                        'TENANT': 'tenant',
+                        'ADMIN': 'admin',
+                    };
+                    const dashRole = roleMap[user.role] || user.role?.toLowerCase() || 'tenant';
+                    window.location.href = `/dashboard/${dashRole}`;
                 }
             } catch (err: any) {
                 setError(err.message || 'Invalid OTP');

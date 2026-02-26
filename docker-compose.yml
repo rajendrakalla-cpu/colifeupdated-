@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=colife
+      - POSTGRES_PASSWORD=colife_pass
+      - POSTGRES_DB=colife_db
+    ports:
+      - '5433:5432'
+    volumes:
+      - colife_pgdata:/var/lib/postgresql/data
+
+volumes:
+  colife_pgdata:

@@ -48,7 +48,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (savedToken) {
             setToken(savedToken);
             usersApi.getMe()
-                .then(userData => setUser(userData))
+                .then((res: any) => {
+                    // The getMe API returns { user: {...}, properties/bookings: [...] }
+                    const userData = res?.user || res;
+                    setUser(userData);
+                })
                 .catch(() => {
                     localStorage.removeItem('colife_token');
                     localStorage.removeItem('colife_refresh');
@@ -62,9 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const login = async (phone: string, otp: string) => {
         const res = await authApi.verifyOtp(phone, otp);
 
-        if (res.isNewUser) {
+        if (!res.isRegistered) {
             // New user — store tempToken for registration step
-            localStorage.setItem('colife_temp_token', res.tempToken);
+            localStorage.setItem('colife_temp_token', phone);
             return { user: { phone } as User, isNew: true };
         }
 
@@ -88,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const headers: Record<string, string> = {};
         if (tempToken) headers['Authorization'] = `Bearer ${tempToken}`;
 
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/v1/auth/register`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/v1/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...headers },
             body: JSON.stringify(data),
@@ -117,8 +121,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const refreshUser = async () => {
-        const userData = await usersApi.getMe();
-        setUser(userData);
+        const res: any = await usersApi.getMe();
+        setUser(res?.user || res);
     };
 
     return (

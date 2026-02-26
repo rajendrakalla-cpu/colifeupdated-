@@ -17,9 +17,9 @@ export default function RegisterPage() {
     const { register } = useAuth();
 
     const userTypes = [
-        { id: 'tenant', icon: <Home size={24} />, title: 'Tenant', desc: 'Looking for a co-living space' },
-        { id: 'owner', icon: <Building2 size={24} />, title: 'Property Owner', desc: 'Want to list your property' },
-        { id: 'manager', icon: <Briefcase size={24} />, title: 'Property Manager', desc: 'Managing properties for owners' },
+        { id: 'TENANT', icon: <Home size={24} />, title: 'Tenant', desc: 'Looking for a co-living space' },
+        { id: 'OWNER', icon: <Building2 size={24} />, title: 'Property Owner', desc: 'Want to list your property' },
+        { id: 'ADMIN', icon: <Briefcase size={24} />, title: 'Property Manager', desc: 'Managing properties for owners' },
     ];
 
     const handleRegister = async () => {
@@ -35,8 +35,8 @@ export default function RegisterPage() {
                 name: formData.name,
                 role: userType,
             });
-            const dashboardPath = userType === 'owner' ? '/dashboard/owner' :
-                userType === 'manager' ? '/dashboard/admin' : '/dashboard/tenant';
+            const dashboardPath = userType === 'OWNER' ? '/dashboard/owner' :
+                userType === 'ADMIN' ? '/dashboard/admin' : '/dashboard/tenant';
             window.location.href = dashboardPath;
         } catch (err: any) {
             setError(err.message || 'Registration failed');
@@ -183,7 +183,7 @@ export default function RegisterPage() {
                                     value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                             </div>
 
-                            {userType === 'tenant' && (
+                            {userType === 'TENANT' && (
                                 <div>
                                     <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: 6 }}>
                                         Gender

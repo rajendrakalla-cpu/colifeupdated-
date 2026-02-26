@@ -10,7 +10,7 @@ import {
     Star, Users, PartyPopper, ClipboardList, Eye
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { bookingsApi, ticketsApi, notificationsApi, paymentsApi, propertiesApi } from '@/lib/api';
+import { bookingsApi, ticketsApi, notificationsApi, paymentsApi, propertiesApi, communityApi } from '@/lib/api';
 
 export default function TenantDashboard() {
     const { user, loading: authLoading, isLoggedIn, logout } = useAuth();
@@ -25,6 +25,9 @@ export default function TenantDashboard() {
     const [ticketForm, setTicketForm] = useState({ title: '', description: '', category: 'electrical', priority: 'medium' });
     const [ticketSubmitting, setTicketSubmitting] = useState(false);
     const [ticketSuccess, setTicketSuccess] = useState('');
+    const [paymentProcessing, setPaymentProcessing] = useState<string | null>(null);
+    const [communityPosts, setCommunityPosts] = useState<any[]>([]);
+    const [communityLoading, setCommunityLoading] = useState(false);
 
     // Redirect if not logged in
     useEffect(() => {
@@ -87,6 +90,57 @@ export default function TenantDashboard() {
         }
     };
 
+    const loadRazorpayScript = (): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            if ((window as any).Razorpay) {
+                resolve();
+                return;
+            }
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load Razorpay SDK'));
+            document.body.appendChild(script);
+        });
+    };
+
+    const handlePayment = async (paymentId: string) => {
+        setPaymentProcessing(paymentId);
+        try {
+            // Ensure Razorpay script is loaded before proceeding
+            await loadRazorpayScript();
+
+            const orderRes = await paymentsApi.createOrder(paymentId);
+            if (!orderRes.orderId) throw new Error('Failed to create order');
+
+            const options = {
+                key: orderRes.keyId || 'rzp_test_SKwi3vNDCmbB2f',
+                amount: orderRes.amount,
+                currency: orderRes.currency,
+                name: "CoLife",
+                description: "Rent Payment",
+                order_id: orderRes.orderId,
+                prefill: orderRes.prefill,
+                theme: { color: "#6C5CE7" },
+                handler: function (response: any) {
+                    alert(`Payment successful! Reference: ${response.razorpay_payment_id}`);
+                    setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'CAPTURED' } : p));
+                },
+            };
+
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', function (response: any) {
+                alert(`Payment Failed: ${response.error.description}`);
+            });
+            rzp.open();
+        } catch (error) {
+            console.error(error);
+            alert('Payment initialization failed. Please try again.');
+        } finally {
+            setPaymentProcessing(null);
+        }
+    };
+
     if (authLoading) {
         return (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
@@ -102,6 +156,7 @@ export default function TenantDashboard() {
     const userRole = user?.role || 'tenant';
     const openTickets = tickets.filter(t => t.status !== 'RESOLVED' && t.status !== 'CLOSED').length;
     const resolvedTickets = tickets.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED').length;
+    const activeBooking = bookings.find(b => b.status === 'CONFIRMED');
 
     const tabs = [
         { id: 'overview', icon: <Home size={18} />, label: 'Overview' },
@@ -158,6 +213,72 @@ export default function TenantDashboard() {
                         <p style={{ color: 'var(--text-muted)', marginBottom: 32 }}>
                             Here&apos;s your dashboard overview
                         </p>
+
+                        {/* Active Booking Hero */}
+                        {activeBooking && (
+                            <div className="card" style={{ padding: 24, marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, fontFamily: 'Outfit' }}>Current Assignment</h3>
+                                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Your active co-living space</p>
+                                    </div>
+                                    <span className="badge badge-success">Active</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginTop: 8 }}>
+                                    <div style={{ flex: 1, minWidth: 200, background: 'rgba(108,92,231,0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(108,92,231,0.1)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--primary-light)', marginBottom: 8 }}>
+                                            <Home size={18} />
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>PROPERTY</span>
+                                        </div>
+                                        <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{activeBooking.room?.property?.name || 'Assigned Property'}</div>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 200, background: 'rgba(253,121,168,0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(253,121,168,0.1)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', marginBottom: 8 }}>
+                                            <ClipboardList size={18} />
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>ROOM & BED</span>
+                                        </div>
+                                        <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>{activeBooking.room?.name || 'Assigned Room'}</div>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 200, background: 'rgba(0,206,201,0.05)', padding: 16, borderRadius: 12, border: '1px solid rgba(0,206,201,0.1)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--secondary)', marginBottom: 8 }}>
+                                            <Calendar size={18} />
+                                            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>MONTHLY RENT</span>
+                                        </div>
+                                        <div style={{ fontWeight: 600, fontSize: '1.1rem' }}>
+                                            {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(
+                                                activeBooking.room?.property?.price || activeBooking.room?.price || 0
+                                            )} <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>/mo</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Pay Now Smart Card */}
+                        {(() => {
+                            const pendingPayments = payments.filter(p => p.status === 'PENDING');
+                            if (pendingPayments.length === 0) return null;
+                            const totalDue = pendingPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+                            const formatINR = (amt: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amt);
+                            return (
+                                <div className="card" style={{ background: 'var(--gradient-primary)', color: 'white', padding: 24, marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                                            <AlertCircle size={20} />
+                                            <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Payment Due</h3>
+                                        </div>
+                                        <div style={{ opacity: 0.9 }}>You have {pendingPayments.length} pending payment(s) totaling <strong>{formatINR(totalDue)}</strong>.</div>
+                                    </div>
+                                    <button
+                                        className="btn-secondary"
+                                        style={{ background: 'white', color: 'var(--primary)', fontWeight: 600, padding: '12px 24px', border: 'none' }}
+                                        onClick={() => setActiveTab('payments')}
+                                    >
+                                        Pay Now
+                                    </button>
+                                </div>
+                            );
+                        })()}
 
                         {/* Stats row */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, marginBottom: 32 }}>
@@ -233,7 +354,7 @@ export default function TenantDashboard() {
                         <h3 style={{ fontFamily: 'Outfit', fontSize: '1.1rem', fontWeight: 600, marginBottom: 16 }}>Quick Actions</h3>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 32 }}>
                             {[
-                                { icon: <CreditCard size={20} />, label: 'Pay Rent', color: 'var(--primary)' },
+                                { icon: <CreditCard size={20} />, label: 'Pay Rent', color: 'var(--primary)', onClick: () => setActiveTab('payments') },
                                 { icon: <Wrench size={20} />, label: 'Raise Ticket', color: 'var(--accent)', onClick: () => setActiveTab('maintenance') },
                                 { icon: <Eye size={20} />, label: 'Browse Properties', color: 'var(--secondary)', href: '/properties' },
                                 { icon: <MessageCircle size={20} />, label: 'Chat Support', color: '#FFC107' },
@@ -323,14 +444,37 @@ export default function TenantDashboard() {
                         {payments.length > 0 ? (
                             <div className="table-container">
                                 <table>
-                                    <thead><tr><th>Amount</th><th>Date</th><th>Status</th><th>Ref</th></tr></thead>
+                                    <thead><tr><th>Amount</th><th>Type</th><th>Date</th><th>Status</th><th>Action / Ref</th></tr></thead>
                                     <tbody>
                                         {payments.map(p => (
                                             <tr key={p.id}>
-                                                <td style={{ fontWeight: 500, color: 'white' }}>₹{p.amount?.toLocaleString('en-IN')}</td>
+                                                <td style={{ fontWeight: 500, color: 'white' }}>₹{(p.amount || 0).toLocaleString('en-IN')}</td>
+                                                <td>
+                                                    <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
+                                                        {p.invoiceType === 'MONTHLY_RENT' ? '🏠 Rent' : p.invoiceType === 'UTILITY' ? '⚡ Utility' : p.invoiceType === 'MOVE_IN' ? '📦 Move-in' : p.invoiceType === 'SECURITY_DEPOSIT' ? '🔒 Deposit' : p.invoiceType === 'ADHOC' ? '📝 Ad-hoc' : '🏠 Rent'}
+                                                    </span>
+                                                </td>
                                                 <td>{new Date(p.createdAt).toLocaleDateString('en-IN')}</td>
-                                                <td><span className={`badge ${p.status === 'CAPTURED' ? 'badge-success' : 'badge-primary'}`}><CheckCircle2 size={12} /> {p.status}</span></td>
-                                                <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{p.razorpayPaymentId || '—'}</td>
+                                                <td>
+                                                    <span className={`badge ${p.status === 'CAPTURED' ? 'badge-success' : p.status === 'PENDING' ? 'badge-warning' : 'badge-primary'}`}>
+                                                        {p.status === 'CAPTURED' && <CheckCircle2 size={12} style={{ marginRight: 4 }} />}
+                                                        {p.status === 'CAPTURED' ? '✓ Paid' : p.status === 'PENDING' ? '⏳ Pending' : p.status}
+                                                    </span>
+                                                </td>
+                                                <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                                                    {p.status === 'PENDING' ? (
+                                                        <button
+                                                            className="btn-primary"
+                                                            style={{ padding: '6px 12px', fontSize: '0.8rem', opacity: paymentProcessing === p.id ? 0.7 : 1 }}
+                                                            onClick={() => handlePayment(p.id)}
+                                                            disabled={paymentProcessing === p.id}
+                                                        >
+                                                            {paymentProcessing === p.id ? 'Processing...' : `Pay ₹${(p.amount || 0).toLocaleString('en-IN')}`}
+                                                        </button>
+                                                    ) : (
+                                                        p.razorpayPaymentId || `Ref: ${p.id.slice(0, 8)}`
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -398,49 +542,10 @@ export default function TenantDashboard() {
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                         <h2 style={{ fontFamily: 'Outfit', fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>Community</h2>
 
-                        <h3 style={{ fontFamily: 'Outfit', fontSize: '1.1rem', fontWeight: 600, marginBottom: 16 }}>📢 Notices</h3>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
-                            {notifications.length > 0 ? notifications.slice(0, 5).map(n => (
-                                <div key={n.id} className="card" style={{ padding: 20, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                                    <div style={{
-                                        width: 36, height: 36, borderRadius: 10,
-                                        background: 'rgba(108,92,231,0.1)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                                    }}>
-                                        <Bell size={18} style={{ color: 'var(--primary-light)' }} />
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: 4 }}>{n.title}</div>
-                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{n.message || n.body}</div>
-                                    </div>
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                                        {new Date(n.createdAt).toLocaleDateString('en-IN')}
-                                    </span>
-                                </div>
-                            )) : (
-                                <div className="card" style={{ padding: 32, textAlign: 'center' }}>
-                                    <p style={{ color: 'var(--text-muted)' }}>No notifications yet</p>
-                                </div>
-                            )}
-                        </div>
-
-                        <h3 style={{ fontFamily: 'Outfit', fontSize: '1.1rem', fontWeight: 600, marginBottom: 16 }}>🎉 Community Events</h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-                            {[
-                                { name: 'Movie Night', date: 'Coming Soon', time: '7:00 PM', emoji: '🎬' },
-                                { name: 'Weekend Potluck', date: 'Coming Soon', time: '1:00 PM', emoji: '🍕' },
-                                { name: 'Sunday Cricket', date: 'Coming Soon', time: '6:30 AM', emoji: '🏏' },
-                            ].map(event => (
-                                <div key={event.name} className="card" style={{ padding: 20, textAlign: 'center' }}>
-                                    <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>{event.emoji}</div>
-                                    <h4 style={{ fontWeight: 600, marginBottom: 6 }}>{event.name}</h4>
-                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 14 }}>{event.date} at {event.time}</div>
-                                    <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '10px' }}>
-                                        RSVP ✓
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
+                        <TenantCommunityFeed
+                            bookings={bookings}
+                            userId={user?.id}
+                        />
                     </motion.div>
                 )}
 
@@ -594,6 +699,100 @@ export default function TenantDashboard() {
                     </motion.div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function TenantCommunityFeed({ bookings, userId }: { bookings: any[]; userId?: string }) {
+    const [posts, setPosts] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // Get propertyId from the first active booking
+    const propertyId = bookings.find(b => b.status === 'CONFIRMED')?.bed?.room?.propertyId
+        || bookings[0]?.bed?.room?.propertyId;
+
+    useEffect(() => {
+        if (!propertyId) { setLoading(false); return; }
+        communityApi.getFeed(propertyId)
+            .then(r => setPosts(r.posts || []))
+            .catch(() => { })
+            .finally(() => setLoading(false));
+    }, [propertyId]);
+
+    const handleRsvp = async (postId: string, status: string) => {
+        if (!propertyId) return;
+        try {
+            await communityApi.rsvp(propertyId, postId, status);
+            const updated = await communityApi.getFeed(propertyId);
+            setPosts(updated.posts || []);
+        } catch { alert('Failed to RSVP'); }
+    };
+
+    if (!propertyId) {
+        return (
+            <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🏠</div>
+                <p style={{ color: 'var(--text-muted)' }}>No active booking. Community features are available once you move in.</p>
+            </div>
+        );
+    }
+
+    if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><div className="spinner" /></div>;
+
+    if (posts.length === 0) {
+        return (
+            <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+                <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📢</div>
+                <p style={{ color: 'var(--text-muted)' }}>No community posts yet. Check back later!</p>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {posts.map(post => (
+                <div key={post.id} className="card" style={{ padding: 24 }}>
+                    <div style={{ marginBottom: 12 }}>
+                        <span className={`badge ${post.type === 'EVENT' ? 'badge-primary' : 'badge-info'}`} style={{ fontSize: '0.7rem', marginBottom: 8, display: 'inline-block' }}>
+                            {post.type === 'EVENT' ? '🎉 Event' : '📢 Announcement'}
+                        </span>
+                        <h4 style={{ fontWeight: 600, fontSize: '1.1rem', marginBottom: 4 }}>{post.title}</h4>
+                    </div>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 12, lineHeight: 1.6 }}>{post.content}</p>
+
+                    {post.type === 'EVENT' && (
+                        <>
+                            <div style={{ display: 'flex', gap: 16, marginBottom: 14, flexWrap: 'wrap' }}>
+                                {post.eventDate && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>📅 {new Date(post.eventDate).toLocaleDateString('en-IN')}</span>}
+                                {post.eventTime && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>🕐 {post.eventTime}</span>}
+                                {post.eventVenue && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>📍 {post.eventVenue}</span>}
+                                <span style={{ fontSize: '0.8rem', color: 'var(--secondary)', fontWeight: 600 }}>
+                                    👥 {post._count?.rsvps || 0}{post.maxAttendees ? ` / ${post.maxAttendees}` : ''} going
+                                </span>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                {(['GOING', 'MAYBE', 'NOT_GOING'] as const).map(status => {
+                                    const myRsvp = post.rsvps?.find((r: any) => r.userId === userId);
+                                    const isActive = myRsvp?.status === status;
+                                    return (
+                                        <button key={status} onClick={() => handleRsvp(post.id, status)}
+                                            className={isActive ? 'btn-primary' : 'btn-ghost'}
+                                            style={{ fontSize: '0.8rem', padding: '6px 14px' }}>
+                                            {status === 'GOING' ? '✅ Going' : status === 'MAYBE' ? '🤔 Maybe' : '❌ Not Going'}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
+
+                    <div style={{ display: 'flex', gap: 12, marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>By {post.author?.name || 'Owner'}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{new Date(post.createdAt).toLocaleDateString('en-IN')}</span>
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }

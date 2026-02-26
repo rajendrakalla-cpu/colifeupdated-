@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  name      String
+  email     String?  @unique
+  role      Role     @default(TENANT)
+  gender    String?
+  avatar    String?
+  aadhaarNumber String?
+  kycDocument   String?
+  kycStatus KycStatus @default(PENDING)
+  razorpayLinkedAccountId String? @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  properties    Property[]     @relation("OwnerProperties")
+  bookings      Booking[]
+  tickets       Ticket[]
+  payments      Payment[]
+  notifications Notification[]
+  bankAccounts  BankAccount[]
+  communityPosts CommunityPost[]
+  eventRsvps    EventRSVP[]
+}
+
+model Property {
+  id            String   @id @default(uuid())
+  name          String
+  location      String
+  city          String
+  address       String
+  price         Float
+  originalPrice Float?
+  type          PropertyType
+  gender        GenderType
+  rating        Float    @default(0)
+  reviewCount   Int      @default(0)
+  amenities     String[]
+  images        String[]
+  description   String
+  highlights    String[]
+  availableFrom DateTime
+  deposit       Float
+  lockIn        String
+  lat           Float?
+  lng           Float?
+  isApproved    Boolean  @default(false)
+  platformFeePercent Float @default(5)
+  
+  ownerId       String
+  owner         User     @relation("OwnerProperties", fields: [ownerId], references: [id])
+  
+  rooms         Room[]
+  tickets       Ticket[]
+  communityPosts CommunityPost[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Room {
+  id         String   @id @default(uuid())
+  name       String
+  type       String   // e.g. "Double Sharing", "Single"
+  capacity   Int
+  price      Float
+  
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  beds       Bed[]
+  bookings   Booking[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Bed {
+  id         String   @id @default(uuid())
+  name       String   // e.g. "Bed A"
+  isOccupied Boolean  @default(false)
+
+  roomId     String
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  bookings   Booking[]
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Booking {
+  id        String        @id @default(uuid())
+  status    BookingStatus @default(PENDING)
+  startDate DateTime
+  endDate   DateTime?
+  amount    Float
+  securityDeposit Float?
+  lockIn    String?
+  nextRentDate DateTime?
+
+  tenantId  String
+  tenant    User   @relation(fields: [tenantId], references: [id])
+
+  roomId    String
+  room      Room   @relation(fields: [roomId], references: [id])
+
+  bedId     String
+  bed       Bed    @relation(fields: [bedId], references: [id])
+
+  payments  Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Ticket {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  category    TicketCategory
+  priority    TicketPriority @default(MEDIUM)
+  status          TicketStatus   @default(OPEN)
+  resolutionImage String?
+  ownerNotes      String?
+  resolvedAt      DateTime?
+
+  tenantId        String
+  tenant      User     @relation(fields: [tenantId], references: [id])
+
+  propertyId  String?
+  property    Property? @relation(fields: [propertyId], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  amount            Float
+  status            PaymentStatus @default(PENDING)
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  splitAmount       Float?
+  ownerTransferId   String?
+  invoiceType       InvoiceType @default(MONTHLY_RENT)
+  dueDate           DateTime @default(now())
+  paidDate          DateTime?
+
+  tenantId          String
+  tenant            User    @relation(fields: [tenantId], references: [id])
+
+  bookingId         String?
+  booking           Booking? @relation(fields: [bookingId], references: [id])
+  
+  utilityLineItems  UtilityLineItem[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  TENANT
+  OWNER
+  ADMIN
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PropertyType {
+  COLIVING
+  PG
+  HOSTEL
+  STUDIO
+}
+
+enum GenderType {
+  MALE
+  FEMALE
+  UNISEX
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  ELECTRICAL
+  PLUMBING
+  FURNITURE
+  CLEANING
+  OTHER
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+model UtilityLineItem {
+  id          String   @id @default(uuid())
+  description String
+  amount      Float
+  
+  paymentId   String
+  payment     Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum InvoiceType {
+  MOVE_IN
+  MONTHLY_RENT
+  UTILITY
+  ADHOC
+  SECURITY_DEPOSIT
+}
+
+model BankAccount {
+  id              String   @id @default(uuid())
+  accountHolder   String
+  accountNumber   String
+  ifscCode        String
+  bankName        String
+  isPrimary       Boolean  @default(true)
+
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CommunityPost {
+  id           String    @id @default(uuid())
+  title        String
+  content      String
+  type         PostType  @default(ANNOUNCEMENT)
+  eventDate    DateTime?
+  eventTime    String?
+  eventVenue   String?
+  maxAttendees Int?
+
+  propertyId   String
+  property     Property  @relation(fields: [propertyId], references: [id])
+  authorId     String
+  author       User      @relation(fields: [authorId], references: [id])
+
+  rsvps        EventRSVP[]
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model EventRSVP {
+  id        String     @id @default(uuid())
+  status    RSVPStatus @default(GOING)
+
+  postId    String
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+
+  createdAt DateTime   @default(now())
+
+  @@unique([postId, userId])
+}
+
+enum PostType {
+  ANNOUNCEMENT
+  EVENT
+}
+
+enum RSVPStatus {
+  GOING
+  MAYBE
+  NOT_GOING
+}

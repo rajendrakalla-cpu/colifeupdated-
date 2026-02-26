@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 interface ApiOptions {
     headers?: Record<string, string>;
@@ -16,9 +16,17 @@ async function request<T>(method: string, path: string, opts?: ApiOptions): Prom
         'Content-Type': 'application/json',
         ...opts?.headers,
     };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${BASE_URL}${path}`, {
+    // We are passing the mock token natively via the URL search query for backend testing 
+    // instead of Authorization header because NextJS API routes parsing is easier
+    const tokenQuery = token ? `?mockEmail=${encodeURIComponent(token!)}` : '';
+
+    // Append the query assuming the path didn't already have one (basic support):
+    const finalPath = path.includes('?')
+        ? `${path}&mockEmail=${encodeURIComponent(token || '')}`
+        : `${path}${tokenQuery}`;
+
+    const res = await fetch(`${BASE_URL}${finalPath}`, {
         method,
         headers,
         body: opts?.body ? JSON.stringify(opts.body) : undefined,
@@ -65,7 +73,10 @@ export const propertiesApi = {
         return api.get<{ properties: any[]; total: number; page: number }>(`/api/v1/properties${qs}`);
     },
     getById: (id: string) => api.get<any>(`/api/v1/properties/${id}`),
+    getOwnerProperty: (id: string) => api.get<{ property: any, metrics: any, payments: any[] }>(`/api/v1/owner/properties/${id}`),
     create: (data: any) => api.post<any>('/api/v1/properties', data),
+    assignBed: (propertyId: string, data: { bedId: string, roomId: string, tenantName: string, tenantPhone: string, tenantEmail: string, tenantGender: string, rentAmount: number, securityDeposit: number, lockIn: string, startDate: string, aadhaarNumber: string }) =>
+        api.post<any>(`/api/v1/owner/properties/${propertyId}/assign-bed`, data),
 };
 
 // ─── Bookings API ───
@@ -87,9 +98,10 @@ export const ticketsApi = {
 
 // ─── Payments API ───
 export const paymentsApi = {
-    createOrder: (bookingId: string) => api.post<any>('/api/v1/payments/create-order', { bookingId }),
+    createOrder: (paymentId: string) => api.post<any>('/api/v1/payments/create-order', { paymentId }),
     verify: (data: any) => api.post<any>('/api/v1/payments/verify', data),
     getHistory: () => api.get<{ payments: any[] }>('/api/v1/payments'),
+    collectRent: (data: { bookingId: string, amount: number, method: 'CASH' | 'LINK' }) => api.post<any>('/api/v1/payments/collect', data),
 };
 
 // ─── Notifications API ───
@@ -97,4 +109,44 @@ export const notificationsApi = {
     getAll: (page = 1) => api.get<{ notifications: any[]; unreadCount: number }>(`/api/v1/notifications?page=${page}`),
     markRead: (id: string) => api.patch<void>(`/api/v1/notifications/${id}/read`),
     markAllRead: () => api.patch<void>('/api/v1/notifications/read-all'),
+};
+
+// ─── Admin API ───
+export const adminApi = {
+    getStats: () => api.get<any>('/api/v1/admin/stats'),
+    getUsers: (params?: { role?: string; search?: string }) => {
+        const qs = params ? '&' + new URLSearchParams(params as any).toString() : '';
+        return api.get<{ users: any[] }>(`/api/v1/admin/users?_=1${qs}`);
+    },
+    updateUser: (id: string, data: any) => api.patch<any>(`/api/v1/admin/users/${id}`, data),
+    createUser: (data: any) => api.post<any>('/api/v1/admin/users', data),
+    updateProperty: (id: string, data: any) => api.patch<any>(`/api/v1/admin/properties/${id}`, data),
+    getPayments: (status?: string) => {
+        const qs = status ? `&status=${status}` : '';
+        return api.get<{ payments: any[]; totalRevenue: number; platformRevenue: number }>(`/api/v1/admin/payments?_=1${qs}`);
+    },
+};
+
+// ─── Bank Accounts API ───
+export const bankAccountsApi = {
+    getAll: (userId: string) => api.get<{ accounts: any[] }>(`/api/v1/bank-accounts?userId=${userId}`),
+    create: (data: { userId: string; accountHolder: string; accountNumber: string; ifscCode: string; bankName: string }) =>
+        api.post<any>('/api/v1/bank-accounts', data),
+    delete: (id: string) => api.delete<void>(`/api/v1/bank-accounts/${id}`),
+};
+
+// ─── Owner Tenant Edit API ───
+export const ownerTenantsApi = {
+    update: (tenantId: string, ownerId: string, data: any) =>
+        api.patch<any>(`/api/v1/owner/tenants/${tenantId}?ownerId=${ownerId}`, data),
+};
+
+// ─── Community API ───
+export const communityApi = {
+    getFeed: (propertyId: string) => api.get<{ posts: any[] }>(`/api/v1/community/${propertyId}`),
+    createPost: (propertyId: string, data: any) => api.post<any>(`/api/v1/community/${propertyId}`, data),
+    rsvp: (propertyId: string, postId: string, status: string) =>
+        api.post<any>(`/api/v1/community/${propertyId}/rsvp`, { postId, status }),
+    deletePost: (propertyId: string, postId: string) =>
+        api.delete<void>(`/api/v1/community/${propertyId}/${postId}`),
 };
