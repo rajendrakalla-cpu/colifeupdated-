@@ -1,24 +1,31 @@
-import * as admin from 'firebase-admin';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
-function getFirebaseAdmin(): admin.app.App {
-    if (admin.apps.length > 0) return admin.apps[0]!;
+// Verify Firebase ID tokens using Firebase's public JWKS endpoint.
+// No service account key required — uses the same public keys Firebase itself uses.
 
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+const PROJECT_ID = process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'colife-17952';
+const JWKS_URI = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
 
-    if (!projectId || !clientEmail || !privateKey) {
-        throw new Error(
-            'Firebase Admin SDK is not configured. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY.'
-        );
-    }
+const getJWKS = (() => {
+    let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+    return () => {
+        if (!jwks) jwks = createRemoteJWKSet(new URL(JWKS_URI));
+        return jwks;
+    };
+})();
 
-    return admin.initializeApp({
-        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-    });
+export interface FirebaseTokenPayload {
+    uid: string;
+    phone_number?: string;
+    email?: string;
+    name?: string;
+    [key: string]: unknown;
 }
 
-export async function verifyFirebaseToken(idToken: string) {
-    const app = getFirebaseAdmin();
-    return admin.auth(app).verifyIdToken(idToken);
+export async function verifyFirebaseToken(idToken: string): Promise<FirebaseTokenPayload> {
+    const { payload } = await jwtVerify(idToken, getJWKS(), {
+        issuer: `https://securetoken.google.com/${PROJECT_ID}`,
+        audience: PROJECT_ID,
+    });
+    return payload as FirebaseTokenPayload;
 }
