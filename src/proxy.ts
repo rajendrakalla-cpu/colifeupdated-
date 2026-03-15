@@ -28,6 +28,7 @@ const PUBLIC_PREFIXES = [
     '/api/v1/auth/',       // login / register
     '/api/v1/webhooks/',   // Razorpay webhook (signed separately)
     '/api/v1/properties',  // public property listing & detail
+    '/api/v1/ai/',         // AI recommendations (public, optionally personalised when auth'd)
     '/api/cron/',          // cron jobs authenticated via CRON_SECRET header
 ];
 
@@ -64,15 +65,32 @@ export async function proxy(request: NextRequest) {
         }
     }
 
-    // Allow public routes through without JWT check
-    if (isPublic(pathname)) {
-        return NextResponse.next();
-    }
-
-    // Validate JWT
+    // For public routes: allow through, but still inject user headers if a valid token is present
     const authHeader = request.headers.get('authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
+    if (isPublic(pathname)) {
+        if (token) {
+            try {
+                const { payload } = await jwtVerify(token, getSecret());
+                const { userId, email, role } = payload as {
+                    userId: string;
+                    email: string | null;
+                    role: string;
+                };
+                const requestHeaders = new Headers(request.headers);
+                requestHeaders.set('x-user-id', userId);
+                requestHeaders.set('x-user-email', email ?? '');
+                requestHeaders.set('x-user-role', role);
+                return NextResponse.next({ request: { headers: requestHeaders } });
+            } catch {
+                // Invalid token on public route — still allow through, just without user headers
+            }
+        }
+        return NextResponse.next();
+    }
+
+    // Protected routes: require a valid JWT
     if (!token) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

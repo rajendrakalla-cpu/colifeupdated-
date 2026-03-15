@@ -25,11 +25,11 @@ export async function GET(request: Request) {
         if (userId) {
             const bookings = await prisma.booking.findMany({
                 where: { tenantId: userId },
-                include: { property: { select: { city: true, id: true } } },
+                include: { room: { include: { property: { select: { city: true, id: true } } } } },
                 take: 10,
             });
-            userCities = [...new Set(bookings.map((b: any) => b.property.city).filter(Boolean))];
-            userBookedIds = bookings.map((b: any) => b.propertyId);
+            userCities = [...new Set(bookings.map((b: any) => b.room.property.city).filter(Boolean))];
+            userBookedIds = bookings.map((b: any) => b.room.propertyId);
         }
 
         // Score each property
