@@ -16,7 +16,8 @@ export async function POST(request: Request) {
         let decoded: Awaited<ReturnType<typeof verifyFirebaseToken>>;
         try {
             decoded = await verifyFirebaseToken(firebaseIdToken);
-        } catch {
+        } catch (tokenErr: any) {
+            console.error('[verify-otp] Firebase token verification failed:', tokenErr?.message ?? tokenErr);
             return NextResponse.json({ error: 'Invalid or expired OTP verification' }, { status: 401 });
         }
 
