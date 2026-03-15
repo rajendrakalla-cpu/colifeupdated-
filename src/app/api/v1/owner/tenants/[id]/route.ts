@@ -1,20 +1,15 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { getUserId } from '@/lib/auth';
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id: tenantId } = await params;
         const body = await request.json();
 
-        // Verify the tenant exists and belongs to a property owned by this owner
-        // In production, check the owner's session. For now, accept ownerId from query.
-        const url = new URL(request.url);
-        const ownerId = url.searchParams.get('ownerId') || body.ownerId;
-
+        const ownerId = getUserId(request);
         if (!ownerId) {
-            return NextResponse.json({ error: 'ownerId is required' }, { status: 400 });
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         // Check tenant is assigned to a property owned by this owner

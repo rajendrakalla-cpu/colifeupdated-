@@ -1,22 +1,10 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-// In a real application, we would use an auth middleware to get the user ID
-// For now, we'll mock the authenticated user based on a query param or default
-async function getAuthenticatedUser(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const mockEmail = searchParams.get('mockEmail') || 'tenant1@colife.com';
-
-    return prisma.user.findUnique({
-        where: { email: mockEmail }
-    });
-}
+import { prisma } from '@/lib/prisma';
+import { getUser } from '@/lib/auth';
 
 export async function GET(request: Request) {
     try {
-        const user = await getAuthenticatedUser(request);
+        const user = await getUser(request);
 
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -77,7 +65,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
     try {
-        const user = await getAuthenticatedUser(request);
+        const user = await getUser(request);
 
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

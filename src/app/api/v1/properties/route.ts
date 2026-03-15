@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { getUser } from '@/lib/auth';
 
 export async function GET(request: Request) {
     try {
@@ -71,17 +70,9 @@ export async function GET(request: Request) {
     }
 }
 
-// Utility for mocking auth
-async function getAuthenticatedUser(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const mockEmail = searchParams.get('mockEmail');
-    if (!mockEmail) return null;
-    return prisma.user.findUnique({ where: { email: mockEmail } });
-}
-
 export async function POST(request: Request) {
     try {
-        const user = await getAuthenticatedUser(request);
+        const user = await getUser(request);
         if (!user || (user.role !== 'OWNER' && user.role !== 'ADMIN')) {
             return NextResponse.json({ error: 'Only property owners can create properties' }, { status: 403 });
         }

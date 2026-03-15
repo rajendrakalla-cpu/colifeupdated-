@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 // PATCH — update ticket status, optionally create utility charge
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

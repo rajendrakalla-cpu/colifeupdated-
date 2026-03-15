@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 export async function GET(request: Request) {
     try {
@@ -54,7 +52,7 @@ export async function POST(request: Request) {
             data: {
                 name,
                 phone,
-                email: email || `${phone}@colifemock.com`,
+                email: email ?? null,
                 role,
                 gender: gender || 'MALE',
                 kycStatus: 'PENDING',

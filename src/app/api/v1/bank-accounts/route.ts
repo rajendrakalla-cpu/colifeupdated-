@@ -1,15 +1,12 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { getUserId } from '@/lib/auth';
 
 // GET — fetch bank accounts for a user
 export async function GET(request: Request) {
     try {
-        const url = new URL(request.url);
-        const userId = url.searchParams.get('userId');
-        // In production, get userId from session. For now, accept it as a query param.
-        if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 });
+        const userId = getUserId(request);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const accounts = await prisma.bankAccount.findMany({
             where: { userId },
@@ -27,10 +24,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { userId, accountHolder, accountNumber, ifscCode, bankName } = body;
+        const { accountHolder, accountNumber, ifscCode, bankName } = body;
+        const userId = getUserId(request);
+        if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-        if (!userId || !accountHolder || !accountNumber || !ifscCode || !bankName) {
-            return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
+        if (!accountHolder || !accountNumber || !ifscCode || !bankName) {
+            return NextResponse.json({ error: 'All account fields are required' }, { status: 400 });
         }
 
         // If this is the first account, make it primary. Otherwise, set existing ones to non-primary.

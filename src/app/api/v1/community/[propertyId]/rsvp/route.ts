@@ -1,17 +1,12 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { getUser } from '@/lib/auth';
 
 // POST — tenant RSVPs to an event
 export async function POST(request: Request, { params }: { params: Promise<{ propertyId: string }> }) {
     try {
-        const url = new URL(request.url);
-        const mockEmail = url.searchParams.get('mockEmail');
-        if (!mockEmail) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-        const user = await prisma.user.findUnique({ where: { email: mockEmail } });
-        if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        const user = await getUser(request);
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await request.json();
         const { postId, status } = body;

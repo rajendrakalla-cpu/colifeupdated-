@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { signToken } from '@/lib/jwt';
 
 export async function POST(request: Request) {
     try {
@@ -11,38 +10,39 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Phone and OTP are required' }, { status: 400 });
         }
 
-        // Simulate successful OTP verification for any code
-        console.log(`[SIMULATION] Verifying OTP ${otp} for ${phone}`);
+        // TODO: replace with real OTP provider (e.g. Twilio Verify, MSG91)
+        // For now, accept any 6-digit code in development; require env-based code in production
+        const isValidOtp =
+            process.env.NODE_ENV !== 'production'
+                ? /^\d{4,6}$/.test(otp)
+                : otp === process.env.OTP_BYPASS_CODE; // set only for automated tests
 
-        // Normalize phone: strip +91 prefix if present for DB lookup
+        if (!isValidOtp) {
+            return NextResponse.json({ error: 'Invalid OTP' }, { status: 401 });
+        }
+
         const normalizedPhone = phone.replace(/^\+91/, '');
 
-        // Find user by phone — try both with and without prefix
         const user = await prisma.user.findFirst({
             where: {
                 OR: [
-                    { phone: phone },
+                    { phone },
                     { phone: normalizedPhone },
                     { phone: `+91${normalizedPhone}` },
-                ]
-            }
+                ],
+            },
         });
 
         if (!user) {
-            // User needs to register
             return NextResponse.json({
                 isRegistered: false,
-                message: 'OTP verified. Please complete registration.'
+                message: 'OTP verified. Please complete registration.',
             });
         }
 
-        // For this frontend mockup architecture, we return the user's email 
-        // which will subsequently be utilized as a mocked 'token' in the GET requests
-        return NextResponse.json({
-            isRegistered: true,
-            accessToken: user.email,
-            user
-        });
+        const accessToken = await signToken({ userId: user.id, email: user.email ?? null, role: user.role });
+
+        return NextResponse.json({ isRegistered: true, accessToken, user });
     } catch (error) {
         console.error('Error verifying OTP:', error);
         return NextResponse.json({ error: 'Failed to verify OTP' }, { status: 500 });

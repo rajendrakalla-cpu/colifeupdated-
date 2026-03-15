@@ -114,7 +114,7 @@ export default function TenantDashboard() {
             if (!orderRes.orderId) throw new Error('Failed to create order');
 
             const options = {
-                key: orderRes.keyId || 'rzp_test_SKwi3vNDCmbB2f',
+                key: orderRes.keyId,
                 amount: orderRes.amount,
                 currency: orderRes.currency,
                 name: "CoLife",

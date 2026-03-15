@@ -1,30 +1,28 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: Request) {
     try {
         const payload = await request.text();
         const signature = request.headers.get('x-razorpay-signature');
-        const secret = process.env.RAZORPAY_WEBHOOK_SECRET || 'mock_webhook_secret';
+        const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+        if (!secret) {
+            console.error('RAZORPAY_WEBHOOK_SECRET is not configured');
+            return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
+        }
 
         if (!signature) {
             return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
         }
 
-        // Verify webhook signature
         const expectedSignature = crypto
             .createHmac('sha256', secret)
             .update(payload)
             .digest('hex');
 
         if (expectedSignature !== signature) {
-            // For local development without a real webhook secret, we'll log it but might allow it in a real mockup scenario.
-            // In production, strictly enforce this block:
-            console.warn('Invalid Razorpay signature. Expected:', expectedSignature, 'Got:', signature);
-            // return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+            return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
         }
 
         const event = JSON.parse(payload);

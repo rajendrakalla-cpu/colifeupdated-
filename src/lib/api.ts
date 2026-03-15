@@ -17,16 +17,9 @@ async function request<T>(method: string, path: string, opts?: ApiOptions): Prom
         ...opts?.headers,
     };
 
-    // We are passing the mock token natively via the URL search query for backend testing 
-    // instead of Authorization header because NextJS API routes parsing is easier
-    const tokenQuery = token ? `?mockEmail=${encodeURIComponent(token!)}` : '';
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    // Append the query assuming the path didn't already have one (basic support):
-    const finalPath = path.includes('?')
-        ? `${path}&mockEmail=${encodeURIComponent(token || '')}`
-        : `${path}${tokenQuery}`;
-
-    const res = await fetch(`${BASE_URL}${finalPath}`, {
+    const res = await fetch(`${BASE_URL}${path}`, {
         method,
         headers,
         body: opts?.body ? JSON.stringify(opts.body) : undefined,
@@ -129,16 +122,16 @@ export const adminApi = {
 
 // ─── Bank Accounts API ───
 export const bankAccountsApi = {
-    getAll: (userId: string) => api.get<{ accounts: any[] }>(`/api/v1/bank-accounts?userId=${userId}`),
-    create: (data: { userId: string; accountHolder: string; accountNumber: string; ifscCode: string; bankName: string }) =>
+    getAll: () => api.get<{ accounts: any[] }>('/api/v1/bank-accounts'),
+    create: (data: { accountHolder: string; accountNumber: string; ifscCode: string; bankName: string }) =>
         api.post<any>('/api/v1/bank-accounts', data),
     delete: (id: string) => api.delete<void>(`/api/v1/bank-accounts/${id}`),
 };
 
 // ─── Owner Tenant Edit API ───
 export const ownerTenantsApi = {
-    update: (tenantId: string, ownerId: string, data: any) =>
-        api.patch<any>(`/api/v1/owner/tenants/${tenantId}?ownerId=${ownerId}`, data),
+    update: (tenantId: string, data: any) =>
+        api.patch<any>(`/api/v1/owner/tenants/${tenantId}`, data),
 };
 
 // ─── Community API ───

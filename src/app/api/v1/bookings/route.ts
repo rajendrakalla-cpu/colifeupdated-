@@ -1,18 +1,11 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient, BookingStatus, Role } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-// Utility for mocking auth since full JWT isn't implemented yet
-async function getAuthenticatedUser(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const mockEmail = searchParams.get('mockEmail') || 'tenant1@colife.com';
-    return prisma.user.findUnique({ where: { email: mockEmail } });
-}
+import { BookingStatus, Role } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { getUser } from '@/lib/auth';
 
 export async function GET(request: Request) {
     try {
-        const user = await getAuthenticatedUser(request);
+        const user = await getUser(request);
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // Tenants see only their bookings. Owners/Admins see all bookings.
@@ -48,7 +41,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
-        const user = await getAuthenticatedUser(request);
+        const user = await getUser(request);
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         const body = await request.json();
