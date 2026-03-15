@@ -15,11 +15,11 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com",
-      "style-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: blob: https:",
-      "font-src 'self'",
-      "connect-src 'self' https://api.razorpay.com",
-      "frame-src https://api.razorpay.com https://checkout.razorpay.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "connect-src 'self' https://api.razorpay.com https://*.googleapis.com https://securetoken.googleapis.com https://identitytoolkit.googleapis.com",
+      "frame-src https://api.razorpay.com https://checkout.razorpay.com https://colife-17952.firebaseapp.com",
     ].join("; "),
   },
 ];
