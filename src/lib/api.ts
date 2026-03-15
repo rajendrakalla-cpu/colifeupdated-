@@ -45,8 +45,8 @@ export const api = {
 // ─── Auth API ───
 export const authApi = {
     sendOtp: (phone: string) => api.post<{ message: string }>('/api/v1/auth/send-otp', { phone }),
-    verifyOtp: (phone: string, otp: string) =>
-        api.post<any>('/api/v1/auth/verify-otp', { phone, otp }),
+    verifyOtp: (firebaseIdToken: string) =>
+        api.post<any>('/api/v1/auth/verify-otp', { firebaseIdToken }),
     register: (data: { phone: string; name: string; role?: string }) =>
         api.post<{ accessToken: string; user: any }>('/api/v1/auth/register', data),
     refresh: (refreshToken: string) =>

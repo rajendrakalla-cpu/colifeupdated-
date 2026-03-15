@@ -1,24 +1,29 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { signToken } from '@/lib/jwt';
+import { verifyFirebaseToken } from '@/lib/firebase-admin';
 
 export async function POST(request: Request) {
     try {
-        const { phone, otp } = await request.json();
+        const body = await request.json();
+        const { firebaseIdToken } = body;
 
-        if (!phone || !otp) {
-            return NextResponse.json({ error: 'Phone and OTP are required' }, { status: 400 });
+        if (!firebaseIdToken) {
+            return NextResponse.json({ error: 'firebaseIdToken is required' }, { status: 400 });
         }
 
-        // TODO: replace with real OTP provider (e.g. Twilio Verify, MSG91)
-        // For now, accept any 6-digit code in development; require env-based code in production
-        const isValidOtp =
-            process.env.NODE_ENV !== 'production'
-                ? /^\d{4,6}$/.test(otp)
-                : otp === process.env.OTP_BYPASS_CODE; // set only for automated tests
+        // Verify the Firebase ID token (this is cryptographically verified by Firebase Admin SDK)
+        let decoded: Awaited<ReturnType<typeof verifyFirebaseToken>>;
+        try {
+            decoded = await verifyFirebaseToken(firebaseIdToken);
+        } catch {
+            return NextResponse.json({ error: 'Invalid or expired OTP verification' }, { status: 401 });
+        }
 
-        if (!isValidOtp) {
-            return NextResponse.json({ error: 'Invalid OTP' }, { status: 401 });
+        // Firebase stores phone number in the token
+        const phone = decoded.phone_number;
+        if (!phone) {
+            return NextResponse.json({ error: 'Phone number not found in token' }, { status: 400 });
         }
 
         const normalizedPhone = phone.replace(/^\+91/, '');
@@ -34,9 +39,11 @@ export async function POST(request: Request) {
         });
 
         if (!user) {
+            // Phone is verified — let frontend proceed to registration
             return NextResponse.json({
                 isRegistered: false,
-                message: 'OTP verified. Please complete registration.',
+                phone,
+                message: 'Phone verified. Please complete registration.',
             });
         }
 

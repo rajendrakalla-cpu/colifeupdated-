@@ -72,7 +72,7 @@ export async function POST(request: Request) {
             orderId: order.id,
             amount: order.amount,
             currency: order.currency,
-            keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+            keyId: process.env.RAZORPAY_KEY_ID,
             prefill: {
                 name: payment.tenant.name,
                 email: payment.tenant.email,

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Phone, ArrowRight, Shield, Sparkles } from 'lucide-react';
+import { ArrowRight, Shield } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
-import { authApi } from '@/lib/api';
+import { getFirebaseAuth, RecaptchaVerifier, signInWithPhoneNumber } from '@/lib/firebase';
+import type { ConfirmationResult } from 'firebase/auth';
 
 export default function LoginPage() {
     const [phone, setPhone] = useState('');
@@ -13,47 +14,85 @@ export default function LoginPage() {
     const [step, setStep] = useState<'phone' | 'otp'>('phone');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const confirmationRef = useRef<ConfirmationResult | null>(null);
+    const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
     const { login } = useAuth();
 
+    // Cleanup reCAPTCHA on unmount
+    useEffect(() => {
+        return () => {
+            recaptchaRef.current?.clear();
+        };
+    }, []);
+
     const handleSendOTP = async () => {
-        if (phone.length === 10) {
-            setLoading(true);
-            setError('');
-            try {
-                await authApi.sendOtp(`+91${phone}`);
-                setStep('otp');
-            } catch (err: any) {
-                setError(err.message || 'Failed to send OTP');
-            } finally {
-                setLoading(false);
+        if (phone.length !== 10) return;
+        setLoading(true);
+        setError('');
+        try {
+            const auth = getFirebaseAuth();
+
+            // Invisible reCAPTCHA — renders in the hidden div below
+            if (!recaptchaRef.current) {
+                recaptchaRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                    size: 'invisible',
+                });
             }
+
+            confirmationRef.current = await signInWithPhoneNumber(
+                auth,
+                `+91${phone}`,
+                recaptchaRef.current,
+            );
+            setStep('otp');
+        } catch (err: any) {
+            console.error('Send OTP error:', err);
+            setError(err.message || 'Failed to send OTP. Please try again.');
+            recaptchaRef.current?.clear();
+            recaptchaRef.current = null;
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleVerifyOTP = async () => {
-        if (otp.length === 6) {
-            setLoading(true);
-            setError('');
-            try {
-                const { user, isNew } = await login(`+91${phone}`, otp);
-                if (isNew) {
-                    window.location.href = '/auth/register';
-                } else {
-                    // Redirect based on role
-                    const roleMap: Record<string, string> = {
-                        'OWNER': 'owner',
-                        'TENANT': 'tenant',
-                        'ADMIN': 'admin',
-                    };
-                    const dashRole = roleMap[user.role] || user.role?.toLowerCase() || 'tenant';
-                    window.location.href = `/dashboard/${dashRole}`;
-                }
-            } catch (err: any) {
-                setError(err.message || 'Invalid OTP');
-            } finally {
-                setLoading(false);
+        if (otp.length !== 6 || !confirmationRef.current) return;
+        setLoading(true);
+        setError('');
+        try {
+            // Firebase verifies the OTP and returns a credential
+            const result = await confirmationRef.current.confirm(otp);
+            const firebaseIdToken = await result.user.getIdToken();
+
+            const { user, isNew } = await login(firebaseIdToken);
+            if (isNew) {
+                window.location.href = '/auth/register';
+            } else {
+                const roleMap: Record<string, string> = { OWNER: 'owner', TENANT: 'tenant', ADMIN: 'admin' };
+                const dashRole = roleMap[user.role] || user.role?.toLowerCase() || 'tenant';
+                window.location.href = `/dashboard/${dashRole}`;
             }
+        } catch (err: any) {
+            console.error('Verify OTP error:', err);
+            if (err.code === 'auth/invalid-verification-code') {
+                setError('Incorrect OTP. Please try again.');
+            } else if (err.code === 'auth/code-expired') {
+                setError('OTP expired. Please request a new one.');
+            } else {
+                setError(err.message || 'Verification failed.');
+            }
+        } finally {
+            setLoading(false);
         }
+    };
+
+    const handleResend = () => {
+        recaptchaRef.current?.clear();
+        recaptchaRef.current = null;
+        confirmationRef.current = null;
+        setStep('phone');
+        setOtp('');
+        setError('');
     };
 
     return (
@@ -203,12 +242,12 @@ export default function LoginPage() {
                         </button>
 
                         <div style={{ textAlign: 'center' }}>
-                            <button className="btn-ghost" onClick={() => { setStep('phone'); setOtp(''); setError(''); }}
+                            <button className="btn-ghost" onClick={handleResend}
                                 style={{ fontSize: '0.85rem' }}>
                                 ← Change number
                             </button>
                             <span style={{ color: 'var(--text-muted)', margin: '0 8px' }}>•</span>
-                            <button className="btn-ghost" onClick={handleSendOTP} style={{ fontSize: '0.85rem', color: 'var(--primary-light)' }}>
+                            <button className="btn-ghost" onClick={handleResend} style={{ fontSize: '0.85rem', color: 'var(--primary-light)' }}>
                                 Resend OTP
                             </button>
                         </div>
@@ -224,17 +263,8 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                {/* Quick login hint */}
-                <div style={{
-                    marginTop: 20, textAlign: 'center', padding: '12px',
-                    background: 'rgba(108,92,231,0.05)', borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(108,92,231,0.1)',
-                }}>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        <Sparkles size={12} style={{ display: 'inline', marginRight: 4 }} />
-                        Dev mode: Use OTP <strong>123456</strong> for any phone number
-                    </p>
-                </div>
+                {/* Invisible reCAPTCHA container required by Firebase */}
+                <div id="recaptcha-container" />
             </motion.div>
         </div>
     );

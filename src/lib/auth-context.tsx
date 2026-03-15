@@ -20,7 +20,7 @@ interface AuthState {
     token: string | null;
     loading: boolean;
     isLoggedIn: boolean;
-    login: (phone: string, otp: string) => Promise<{ user: User; isNew: boolean }>;
+    login: (firebaseIdToken: string) => Promise<{ user: User; isNew: boolean }>;
     register: (data: { phone: string; name: string; role?: string }) => Promise<User>;
     logout: () => void;
     refreshUser: () => Promise<void>;
@@ -31,7 +31,7 @@ const AuthContext = createContext<AuthState>({
     token: null,
     loading: true,
     isLoggedIn: false,
-    login: async () => ({ user: {} as User, isNew: false }),
+    login: async (_token: string) => ({ user: {} as User, isNew: false }),
     register: async () => ({} as User),
     logout: () => { },
     refreshUser: async () => { },
@@ -63,18 +63,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    const login = async (phone: string, otp: string) => {
-        const res = await authApi.verifyOtp(phone, otp);
+    const login = async (firebaseIdToken: string) => {
+        const res = await authApi.verifyOtp(firebaseIdToken);
 
         if (!res.isRegistered) {
-            // New user — store tempToken for registration step
-            localStorage.setItem('colife_temp_token', phone);
-            return { user: { phone } as User, isNew: true };
+            // Phone is Firebase-verified — store the token for registration
+            localStorage.setItem('colife_temp_firebase_token', firebaseIdToken);
+            if (res.phone) localStorage.setItem('colife_temp_phone', res.phone);
+            return { user: { phone: res.phone } as User, isNew: true };
         }
 
-        // Existing user — store access tokens and fetch profile
         localStorage.setItem('colife_token', res.accessToken);
-        localStorage.setItem('colife_refresh', res.refreshToken);
         setToken(res.accessToken);
 
         let userData = res.user;
@@ -83,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         if (userData) setUser(userData);
 
-        return { user: userData || ({ phone } as User), isNew: false };
+        return { user: userData || ({} as User), isNew: false };
     };
 
     const register = async (data: { phone: string; name: string; role?: string }) => {
