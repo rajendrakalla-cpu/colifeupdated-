@@ -1,17 +1,34 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import {
     Search, SlidersHorizontal, MapPin, Grid3X3, List, X
 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import PropertyCard from '@/components/PropertyCard';
 import { properties as mockProperties } from '@/lib/data';
 import { propertiesApi } from '@/lib/api';
 
 export default function PropertiesPage() {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [selectedCity, setSelectedCity] = useState('');
+    return (
+        <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+                <div className="animate-pulse-glow" style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--primary)' }} />
+            </div>
+        }>
+            <PropertiesContent />
+        </Suspense>
+    );
+}
+
+function PropertiesContent() {
+    const searchParams = useSearchParams();
+    const cityParam = searchParams.get('city') || '';
+    const qParam = searchParams.get('search') || '';
+
+    const [searchQuery, setSearchQuery] = useState(qParam);
+    const [selectedCity, setSelectedCity] = useState(cityParam);
     const [selectedGender, setSelectedGender] = useState('');
     const [selectedType, setSelectedType] = useState('');
     const [priceRange, setPriceRange] = useState([0, 20000]);
@@ -23,7 +40,11 @@ export default function PropertiesPage() {
 
     // Try to fetch properties from API, fallback to mock data
     useEffect(() => {
-        propertiesApi.search()
+        const params: any = {};
+        if (selectedCity) params.city = selectedCity;
+        if (searchQuery) params.search = searchQuery;
+
+        propertiesApi.search(params)
             .then(res => {
                 const apiProps = res?.properties || res;
                 if (Array.isArray(apiProps) && apiProps.length > 0) {
@@ -33,7 +54,7 @@ export default function PropertiesPage() {
             .catch(() => {
                 // Keep mock data on failure — no-op
             });
-    }, []);
+    }, [selectedCity, searchQuery]);
 
     const allAmenities = ['Wi-Fi', 'AC', 'Laundry', 'Gym', 'Meals', 'Power Backup', 'Parking', 'CCTV', 'Swimming Pool', 'Coworking Space'];
 

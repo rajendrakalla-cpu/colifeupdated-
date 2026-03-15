@@ -104,42 +104,10 @@ export const notificationsApi = {
     markAllRead: () => api.patch<void>('/api/v1/notifications/read-all'),
 };
 
-// ─── Admin API ───
-export const adminApi = {
-    getStats: () => api.get<any>('/api/v1/admin/stats'),
-    getUsers: (params?: { role?: string; search?: string }) => {
-        const qs = params ? '&' + new URLSearchParams(params as any).toString() : '';
-        return api.get<{ users: any[] }>(`/api/v1/admin/users?_=1${qs}`);
-    },
-    updateUser: (id: string, data: any) => api.patch<any>(`/api/v1/admin/users/${id}`, data),
-    createUser: (data: any) => api.post<any>('/api/v1/admin/users', data),
-    updateProperty: (id: string, data: any) => api.patch<any>(`/api/v1/admin/properties/${id}`, data),
-    getPayments: (status?: string) => {
-        const qs = status ? `&status=${status}` : '';
-        return api.get<{ payments: any[]; totalRevenue: number; platformRevenue: number }>(`/api/v1/admin/payments?_=1${qs}`);
-    },
-};
-
-// ─── Bank Accounts API ───
-export const bankAccountsApi = {
-    getAll: () => api.get<{ accounts: any[] }>('/api/v1/bank-accounts'),
-    create: (data: { accountHolder: string; accountNumber: string; ifscCode: string; bankName: string }) =>
-        api.post<any>('/api/v1/bank-accounts', data),
-    delete: (id: string) => api.delete<void>(`/api/v1/bank-accounts/${id}`),
-};
-
-// ─── Owner Tenant Edit API ───
-export const ownerTenantsApi = {
-    update: (tenantId: string, data: any) =>
-        api.patch<any>(`/api/v1/owner/tenants/${tenantId}`, data),
-};
-
-// ─── Community API ───
-export const communityApi = {
-    getFeed: (propertyId: string) => api.get<{ posts: any[] }>(`/api/v1/community/${propertyId}`),
-    createPost: (propertyId: string, data: any) => api.post<any>(`/api/v1/community/${propertyId}`, data),
-    rsvp: (propertyId: string, postId: string, status: string) =>
-        api.post<any>(`/api/v1/community/${propertyId}/rsvp`, { postId, status }),
-    deletePost: (propertyId: string, postId: string) =>
-        api.delete<void>(`/api/v1/community/${propertyId}/${postId}`),
+// ─── AI API ───
+export const aiApi = {
+    getRecommendations: (limit = 10) => api.get<any[]>(`/api/v1/ai/recommendations?limit=${limit}`),
+    getSuggestedPrice: (roomId: string) => api.get<any>(`/api/v1/ai/pricing/${roomId}`),
+    applySuggestedPrice: (roomId: string) => api.post<any>(`/api/v1/ai/pricing/${roomId}/apply`),
+    getCompatibility: (u1: string, u2: string) => api.get<any>(`/api/v1/ai/compatibility?userId1=${u1}&userId2=${u2}`),
 };

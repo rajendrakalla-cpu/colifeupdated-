@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { properties as mockProperties, amenityIcons } from '@/lib/data';
 import { propertiesApi } from '@/lib/api';
+import RecommendationsSection from '@/components/RecommendationsSection';
 
 const amenityFullIcons: Record<string, React.ReactNode> = {
     'Wi-Fi': <Wifi size={20} />,
@@ -45,15 +46,16 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                         id: p.id,
                         name: p.name,
                         address: p.address || p.city,
+                        location: p.locality || (p.address ? p.address.split(',')[0] : p.city),
                         city: p.city,
                         type: p.type || 'Co-Living',
                         gender: p.gender || 'Unisex',
                         description: p.description || 'A premium co-living space with modern amenities.',
                         amenities: p.amenities || [],
                         highlights: p.highlights || ['Professional Housekeeping', 'High-Speed WiFi', '24/7 Security', 'Furnished Rooms'],
-                        price: p.price || p.rooms?.[0]?.rent || 12000,
+                        price: p.price || p.rooms?.[0]?.basePrice || 12000,
                         originalPrice: p.originalPrice || null,
-                        roomType: p.roomType || (p.rooms?.[0]?.type) || 'Single Sharing',
+                        roomType: p.roomType || (p.rooms?.[0]?.roomType) || 'Single Sharing',
                         deposit: p.deposit || 25000,
                         lockIn: p.lockIn || '3 months',
                         availableFrom: p.availableFrom || new Date().toISOString(),
@@ -278,6 +280,9 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                                 ))}
                             </div>
                         </motion.div>
+
+                        {/* AI Recommendations */}
+                        <RecommendationsSection currentPropertyId={id} />
                     </div>
 
                     {/* Right Column — Booking Card */}
