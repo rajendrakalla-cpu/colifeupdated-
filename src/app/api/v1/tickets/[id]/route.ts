@@ -22,7 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
                 where: {
                     tenantId: ticket.tenantId,
                     status: 'CONFIRMED',
-                    bed: { room: { propertyId: ticket.propertyId } },
+                    bed: { room: { propertyId: ticket.propertyId ?? undefined } },
                 },
             });
 

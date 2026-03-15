@@ -104,6 +104,28 @@ export const notificationsApi = {
     markAllRead: () => api.patch<void>('/api/v1/notifications/read-all'),
 };
 
+// ─── Community API ───
+export const communityApi = {
+    getFeed: (propertyId: string) => api.get<{ posts: any[] }>(`/api/v1/community/${propertyId}`),
+    createPost: (propertyId: string, data: any) => api.post<any>(`/api/v1/community/${propertyId}`, data),
+    deletePost: (propertyId: string, postId: string) => api.delete<void>(`/api/v1/community/${propertyId}/${postId}`),
+    rsvp: (propertyId: string, postId: string, status: string) =>
+        api.post<any>(`/api/v1/community/${propertyId}/rsvp`, { postId, status }),
+};
+
+// ─── Admin API ───
+export const adminApi = {
+    getStats: () => api.get<any>('/api/v1/admin/stats'),
+    getUsers: (params?: Record<string, string>) => {
+        const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+        return api.get<{ users: any[] }>(`/api/v1/admin/users${qs}`);
+    },
+    createUser: (data: any) => api.post<any>('/api/v1/admin/users', data),
+    updateUser: (id: string, data: any) => api.patch<any>(`/api/v1/admin/users/${id}`, data),
+    getPayments: () => api.get<{ payments: any[]; totalRevenue?: number; platformRevenue?: number }>('/api/v1/admin/payments'),
+    updateProperty: (id: string, data: any) => api.patch<any>(`/api/v1/admin/properties/${id}`, data),
+};
+
 // ─── AI API ───
 export const aiApi = {
     getRecommendations: (limit = 10) => api.get<any[]>(`/api/v1/ai/recommendations?limit=${limit}`),

@@ -13,6 +13,8 @@ interface User {
     avatar?: string;
     kycStatus?: string;
     isActive: boolean;
+    razorpayLinkedAccountId?: string;
+    [key: string]: unknown;
 }
 
 interface AuthState {

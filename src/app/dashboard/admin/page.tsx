@@ -82,7 +82,7 @@ export default function AdminDashboard() {
         if (activeTab === 'payments' && payments.length === 0) {
             adminApi.getPayments().then(res => {
                 setPayments(res.payments || []);
-                setRevenueData({ totalRevenue: res.totalRevenue, platformRevenue: res.platformRevenue });
+                setRevenueData({ totalRevenue: res.totalRevenue ?? 0, platformRevenue: res.platformRevenue ?? 0 });
             }).catch(() => { });
         }
     }, [activeTab]);
