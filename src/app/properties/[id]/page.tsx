@@ -118,7 +118,12 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             });
             rzp.open();
         } catch (err: any) {
-            setBookError(err.message || 'Failed to initiate booking. Please try again.');
+            const msg = err.message || '';
+            if (msg.includes('BED_UNAVAILABLE') || msg.includes('No beds available')) {
+                setBookError('This bed was just taken by someone else. Please refresh the page — the property may be sold out.');
+            } else {
+                setBookError(msg || 'Failed to initiate booking. Please try again.');
+            }
             setBookLoading(false);
         }
     };
@@ -367,9 +372,15 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
                                     {property.occupiedBeds} / {property.totalBeds} beds occupied
                                 </span>
-                                <span style={{ color: 'var(--secondary)', fontWeight: 600, fontSize: '0.9rem' }}>
-                                    {property.totalBeds - property.occupiedBeds} beds available
-                                </span>
+                                {(property.totalBeds - property.occupiedBeds) > 0 ? (
+                                    <span style={{ color: 'var(--secondary)', fontWeight: 600, fontSize: '0.9rem' }}>
+                                        {property.totalBeds - property.occupiedBeds} beds available
+                                    </span>
+                                ) : (
+                                    <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: '0.9rem' }}>
+                                        Sold Out
+                                    </span>
+                                )}
                             </div>
                             <div className="progress-bar" style={{ height: 10, borderRadius: 5 }}>
                                 <div className="progress-bar-fill" style={{
@@ -455,9 +466,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                         <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Available Beds</span>
-                                        <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--secondary)' }}>
-                                            {(property.totalBeds || 0) - (property.occupiedBeds || 0)}
-                                        </span>
+                                        {((property.totalBeds || 0) - (property.occupiedBeds || 0)) > 0 ? (
+                                            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--secondary)' }}>
+                                                {(property.totalBeds || 0) - (property.occupiedBeds || 0)}
+                                            </span>
+                                        ) : (
+                                            <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--accent)' }}>Sold Out</span>
+                                        )}
                                     </div>
                                 </div>
 
@@ -480,16 +495,32 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                                 </div>
 
                                 {/* CTA */}
-                                <button
-                                    className="btn-primary"
-                                    style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '1rem' }}
-                                    onClick={handleBookNow}
-                                >
-                                    {isLoggedIn ? 'Book Now — ₹500 Hold Fee' : 'Login to Book'}
-                                </button>
-                                <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 8 }}>
-                                    Fully refundable • Room locked for 15 minutes
-                                </p>
+                                {(property.totalBeds - property.occupiedBeds) <= 0 ? (
+                                    <>
+                                        <button
+                                            disabled
+                                            style={{ width: '100%', padding: '14px', fontSize: '1rem', fontWeight: 700, borderRadius: 'var(--radius-sm)', border: 'none', background: 'rgba(253,121,168,0.15)', color: 'var(--accent)', cursor: 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                                        >
+                                            🔴 Sold Out — No Beds Available
+                                        </button>
+                                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 8 }}>
+                                            All beds are currently occupied
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            className="btn-primary"
+                                            style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '1rem' }}
+                                            onClick={handleBookNow}
+                                        >
+                                            {isLoggedIn ? 'Book Now — ₹500 Hold Fee' : 'Login to Book'}
+                                        </button>
+                                        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 8 }}>
+                                            Fully refundable • Room locked for 15 minutes
+                                        </p>
+                                    </>
+                                )}
 
                                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 20 }}>
                                     <button

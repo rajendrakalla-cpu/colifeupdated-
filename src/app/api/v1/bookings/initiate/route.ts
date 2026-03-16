@@ -45,8 +45,20 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No beds available in this property' }, { status: 400 });
         }
 
-        // Create booking + hold payment in a transaction
+        // Create booking + hold payment in a transaction, atomically marking the bed occupied
         const { booking, payment } = await prisma.$transaction(async (tx) => {
+            // Re-check availability inside the transaction to prevent race conditions
+            const bed = await tx.bed.findUnique({ where: { id: availableBed.id } });
+            if (!bed || bed.isOccupied) {
+                throw new Error('BED_UNAVAILABLE');
+            }
+
+            // Mark bed occupied immediately so no concurrent booking can claim it
+            await tx.bed.update({
+                where: { id: availableBed.id },
+                data: { isOccupied: true },
+            });
+
             const booking = await tx.booking.create({
                 data: {
                     tenantId: user.id,

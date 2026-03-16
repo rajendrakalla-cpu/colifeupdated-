@@ -35,7 +35,7 @@ export async function GET(
         let occupiedBeds = 0;
 
         property.rooms.forEach(room => {
-            totalBeds += room.capacity;
+            totalBeds += room.beds.length;
             room.beds.forEach(bed => {
                 if (bed.isOccupied) occupiedBeds++;
             });
