@@ -68,8 +68,12 @@ export const propertiesApi = {
     getById: (id: string) => api.get<any>(`/api/v1/properties/${id}`),
     getOwnerProperty: (id: string) => api.get<{ property: any, metrics: any, payments: any[] }>(`/api/v1/owner/properties/${id}`),
     create: (data: any) => api.post<any>('/api/v1/properties', data),
-    assignBed: (propertyId: string, data: { bedId: string, roomId: string, tenantName: string, tenantPhone: string, tenantEmail: string, tenantGender: string, rentAmount: number, securityDeposit: number, lockIn: string, startDate: string, aadhaarNumber: string }) =>
+    assignBed: (propertyId: string, data: any) =>
         api.post<any>(`/api/v1/owner/properties/${propertyId}/assign-bed`, data),
+    confirmBooking: (propertyId: string, data: { bookingId: string; depositAmount?: number; rentAmount: number; paymentMethod: 'CASH' | 'LINK'; splitPayment?: boolean }) =>
+        api.post<any>(`/api/v1/owner/properties/${propertyId}/confirm-booking`, data),
+    tenantLookup: (phone: string) =>
+        api.get<{ found: boolean; user?: any }>(`/api/v1/owner/tenant-lookup?phone=${encodeURIComponent(phone)}`),
 };
 
 // ─── Bookings API ───

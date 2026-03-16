@@ -1,42 +1,48 @@
 import { NextResponse } from 'next/server';
+import { InvoiceType, PaymentStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { getUser } from '@/lib/auth';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
+        const user = await getUser(request);
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (user.role !== 'OWNER' && user.role !== 'ADMIN') {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+
         const { id: propertyId } = await params;
         const body = await request.json();
         const {
             bedId, roomId,
             tenantName, tenantPhone, tenantEmail, tenantGender,
             rentAmount, securityDeposit, lockIn, startDate,
-            aadhaarNumber, kycDocument
+            aadhaarNumber, kycDocument,
+            paymentMethod, splitPayment,
         } = body;
 
         if (!bedId || !roomId || !tenantName || !tenantPhone || !rentAmount || !startDate) {
             return NextResponse.json({ error: 'Missing required assignment parameters' }, { status: 400 });
         }
 
-        // Verify the property and bed exist and that the bed is actually vacant
         const bed = await prisma.bed.findUnique({
             where: { id: bedId },
-            include: { room: true }
+            include: { room: { include: { property: true } } },
         });
 
-        if (!bed) {
-            return NextResponse.json({ error: 'Bed not found' }, { status: 404 });
-        }
-
+        if (!bed) return NextResponse.json({ error: 'Bed not found' }, { status: 404 });
         if (bed.room.propertyId !== propertyId) {
             return NextResponse.json({ error: 'Bed does not belong to this property' }, { status: 400 });
         }
-
+        if (user.role === 'OWNER' && bed.room.property.ownerId !== user.id) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
         if (bed.isOccupied) {
-            return NextResponse.json({ error: 'Bed is strongly marked as already occupied' }, { status: 400 });
+            return NextResponse.json({ error: 'Bed is already occupied' }, { status: 400 });
         }
 
-        // Use a transaction to ensure atomic operations: Upsert User -> Map Booking -> Update Bed
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Upsert the User (Tenant) based on their phone number
+            // Upsert tenant user
             const tenant = await tx.user.upsert({
                 where: { phone: tenantPhone },
                 update: {
@@ -46,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                     aadhaarNumber: aadhaarNumber || null,
                     kycDocument: kycDocument || null,
                     kycStatus: aadhaarNumber ? 'VERIFIED' : 'PENDING',
-                    role: 'TENANT', // Ensure they are marked as a tenant
+                    role: 'TENANT',
                 },
                 create: {
                     phone: tenantPhone,
@@ -60,25 +66,69 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
                 },
             });
 
-            // 2. Create the unified Booking record
             const booking = await tx.booking.create({
                 data: {
                     tenantId: tenant.id,
-                    roomId: roomId,
-                    bedId: bedId,
+                    roomId,
+                    bedId,
                     status: 'CONFIRMED',
                     startDate: new Date(startDate),
                     amount: parseFloat(rentAmount),
                     securityDeposit: securityDeposit ? parseFloat(securityDeposit) : null,
                     lockIn: lockIn || null,
-                }
+                },
             });
 
-            // 3. Update the Bed to indicate it's now occupied
-            await tx.bed.update({
-                where: { id: bedId },
-                data: { isOccupied: true }
-            });
+            await tx.bed.update({ where: { id: bedId }, data: { isOccupied: true } });
+
+            // Create payment records if a payment method is specified
+            if (paymentMethod && paymentMethod !== 'NONE') {
+                const isCapture = paymentMethod === 'CASH';
+                const rent = parseFloat(rentAmount);
+                const dep = securityDeposit ? parseFloat(securityDeposit) : 0;
+
+                if (splitPayment && dep > 0) {
+                    await tx.payment.create({
+                        data: {
+                            tenantId: tenant.id,
+                            bookingId: booking.id,
+                            amount: dep,
+                            status: isCapture ? PaymentStatus.CAPTURED : PaymentStatus.PENDING,
+                            invoiceType: InvoiceType.SECURITY_DEPOSIT,
+                            dueDate: new Date(),
+                            paidDate: isCapture ? new Date() : null,
+                        },
+                    });
+                    if (rent > 0) {
+                        await tx.payment.create({
+                            data: {
+                                tenantId: tenant.id,
+                                bookingId: booking.id,
+                                amount: rent,
+                                status: isCapture ? PaymentStatus.CAPTURED : PaymentStatus.PENDING,
+                                invoiceType: InvoiceType.MOVE_IN,
+                                dueDate: new Date(),
+                                paidDate: isCapture ? new Date() : null,
+                            },
+                        });
+                    }
+                } else {
+                    const total = dep + rent;
+                    if (total > 0) {
+                        await tx.payment.create({
+                            data: {
+                                tenantId: tenant.id,
+                                bookingId: booking.id,
+                                amount: total,
+                                status: isCapture ? PaymentStatus.CAPTURED : PaymentStatus.PENDING,
+                                invoiceType: InvoiceType.MOVE_IN,
+                                dueDate: new Date(),
+                                paidDate: isCapture ? new Date() : null,
+                            },
+                        });
+                    }
+                }
+            }
 
             return { tenant, booking };
         });
@@ -86,9 +136,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         return NextResponse.json({
             message: 'Tenant assigned successfully',
             tenant: result.tenant,
-            booking: result.booking
+            booking: result.booking,
         });
-
     } catch (error) {
         console.error('Bed assignment error:', error);
         return NextResponse.json({ error: 'Failed to assign tenant to bed' }, { status: 500 });

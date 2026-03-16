@@ -9,7 +9,8 @@ import { motion } from 'framer-motion';
 import {
     Home, Building2, BarChart3, CreditCard, Users, Settings,
     LogOut, TrendingUp, IndianRupee, BedDouble,
-    Wrench, AlertCircle, ChevronRight, ArrowUpRight, Plus, ArrowLeft, CheckCircle2, Trash2
+    Wrench, AlertCircle, ChevronRight, ArrowUpRight, Plus, ArrowLeft, CheckCircle2, Trash2,
+    X, UserPlus, Clock, Loader2, Search,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { propertiesApi, ticketsApi, bookingsApi, paymentsApi } from '@/lib/api';
@@ -42,6 +43,38 @@ export default function OwnerDashboard() {
     const [formSuccess, setFormSuccess] = useState('');
     const [formError, setFormError] = useState('');
 
+    // ── Assignment Wizard state ──
+    const [showWizard, setShowWizard] = useState(false);
+    const [wizardMode, setWizardMode] = useState<'held' | 'new'>('new');
+    const [wizardStep, setWizardStep] = useState(1);
+    const [wizardLoading, setWizardLoading] = useState(false);
+    const [wizardError, setWizardError] = useState('');
+    const [wizardSuccess, setWizardSuccess] = useState('');
+
+    // Option A (complete onboarding for held tenant)
+    const [selectedPendingBooking, setSelectedPendingBooking] = useState<any>(null);
+    const [heldRentAmount, setHeldRentAmount] = useState('');
+    const [heldDepositAmount, setHeldDepositAmount] = useState('');
+    const [heldPaymentMethod, setHeldPaymentMethod] = useState<'CASH' | 'LINK'>('LINK');
+    const [heldSplitPayment, setHeldSplitPayment] = useState(false);
+
+    // Option B (assign new tenant)
+    const [newPhone, setNewPhone] = useState('');
+    const [newFoundUser, setNewFoundUser] = useState<any>(null);
+    const [newName, setNewName] = useState('');
+    const [newEmail, setNewEmail] = useState('');
+    const [newGender, setNewGender] = useState('');
+    const [newAadhaar, setNewAadhaar] = useState('');
+    const [newSelectedPropertyId, setNewSelectedPropertyId] = useState('');
+    const [newSelectedRoomId, setNewSelectedRoomId] = useState('');
+    const [newSelectedBedId, setNewSelectedBedId] = useState('');
+    const [newRent, setNewRent] = useState('');
+    const [newDeposit, setNewDeposit] = useState('');
+    const [newLockIn, setNewLockIn] = useState('3 months');
+    const [newStartDate, setNewStartDate] = useState('');
+    const [newPaymentMethod, setNewPaymentMethod] = useState<'CASH' | 'LINK'>('LINK');
+    const [newSplitPayment, setNewSplitPayment] = useState(false);
+
     const allAmenities = ['Wi-Fi', 'AC', 'Laundry', 'Gym', 'Meals', 'Power Backup', 'Parking', 'CCTV', 'Games Room', 'Yoga Studio', 'Library', 'Coworking Space', 'Swimming Pool', 'Study Room'];
 
     const toggleAmenity = (am: string) => {
@@ -58,6 +91,134 @@ export default function OwnerDashboard() {
 
     const updateRoom = (i: number, field: string, value: string) => {
         setRooms(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r));
+    };
+
+    // ── Wizard helpers ──
+    const openHeldWizard = (booking: any) => {
+        setSelectedPendingBooking(booking);
+        setWizardMode('held');
+        setHeldRentAmount(String(booking.amount || booking.room?.price || ''));
+        setHeldDepositAmount('');
+        setHeldPaymentMethod('LINK');
+        setHeldSplitPayment(false);
+        setWizardStep(1);
+        setWizardError('');
+        setWizardSuccess('');
+        setShowWizard(true);
+    };
+
+    const openNewWizard = () => {
+        setWizardMode('new');
+        setWizardStep(1);
+        setNewPhone('');
+        setNewFoundUser(null);
+        setNewName('');
+        setNewEmail('');
+        setNewGender('');
+        setNewAadhaar('');
+        setNewSelectedPropertyId(properties[0]?.id || '');
+        setNewSelectedRoomId('');
+        setNewSelectedBedId('');
+        setNewRent('');
+        setNewDeposit('');
+        setNewLockIn('3 months');
+        setNewStartDate(new Date().toISOString().split('T')[0]);
+        setNewPaymentMethod('LINK');
+        setNewSplitPayment(false);
+        setWizardError('');
+        setWizardSuccess('');
+        setShowWizard(true);
+    };
+
+    const lookupTenant = async () => {
+        if (!newPhone.trim()) return;
+        setWizardLoading(true);
+        setWizardError('');
+        try {
+            const res = await propertiesApi.tenantLookup(newPhone.trim());
+            if ((res as any).found) {
+                const u = (res as any).user;
+                setNewFoundUser(u);
+                setNewName(u.name);
+                setNewEmail(u.email || '');
+                setNewGender(u.gender || '');
+            } else {
+                setNewFoundUser(null);
+            }
+            setWizardStep(2);
+        } catch {
+            setWizardStep(2);
+        } finally {
+            setWizardLoading(false);
+        }
+    };
+
+    const confirmHeldTenant = async () => {
+        if (!selectedPendingBooking || !heldRentAmount) return;
+        setWizardLoading(true);
+        setWizardError('');
+        try {
+            const propertyId = selectedPendingBooking.room?.property?.id || selectedPendingBooking.room?.propertyId;
+            await propertiesApi.confirmBooking(propertyId, {
+                bookingId: selectedPendingBooking.id,
+                depositAmount: heldDepositAmount ? parseFloat(heldDepositAmount) : 0,
+                rentAmount: parseFloat(heldRentAmount),
+                paymentMethod: heldPaymentMethod,
+                splitPayment: heldSplitPayment,
+            });
+            setWizardSuccess(
+                heldPaymentMethod === 'CASH'
+                    ? 'Booking confirmed! Cash payment recorded in ledger.'
+                    : 'Booking confirmed! Payment request raised in tenant dashboard.'
+            );
+            const bkRes = await bookingsApi.getAll();
+            setBookings((bkRes as any)?.bookings || []);
+        } catch (err: any) {
+            setWizardError(err.message || 'Failed to confirm booking');
+        } finally {
+            setWizardLoading(false);
+        }
+    };
+
+    const confirmNewTenant = async () => {
+        if (!newSelectedBedId || !newSelectedRoomId || !newPhone || !newName || !newRent || !newStartDate || !newSelectedPropertyId) {
+            setWizardError('Please fill in all required fields.');
+            return;
+        }
+        setWizardLoading(true);
+        setWizardError('');
+        try {
+            await propertiesApi.assignBed(newSelectedPropertyId, {
+                bedId: newSelectedBedId,
+                roomId: newSelectedRoomId,
+                tenantName: newName,
+                tenantPhone: newPhone,
+                tenantEmail: newEmail,
+                tenantGender: newGender,
+                rentAmount: parseFloat(newRent),
+                securityDeposit: newDeposit ? parseFloat(newDeposit) : 0,
+                lockIn: newLockIn,
+                startDate: newStartDate,
+                aadhaarNumber: newAadhaar,
+                paymentMethod: newPaymentMethod,
+                splitPayment: newSplitPayment,
+            });
+            setWizardSuccess(
+                newPaymentMethod === 'CASH'
+                    ? 'Tenant assigned! Cash payment recorded in ledger.'
+                    : 'Tenant assigned! Payment request raised in their dashboard.'
+            );
+            const [bkRes, propsRes] = await Promise.allSettled([bookingsApi.getAll(), propertiesApi.search()]);
+            if (bkRes.status === 'fulfilled') setBookings((bkRes.value as any)?.bookings || []);
+            if (propsRes.status === 'fulfilled') {
+                const p = (propsRes.value as any)?.properties || [];
+                setProperties(Array.isArray(p) ? p : []);
+            }
+        } catch (err: any) {
+            setWizardError(err.message || 'Failed to assign tenant');
+        } finally {
+            setWizardLoading(false);
+        }
     };
 
     // Google Maps Autocomplete Initialization
@@ -176,6 +337,15 @@ export default function OwnerDashboard() {
     const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
     const monthlyRevenue = payments.filter(p => p.status === 'CAPTURED').reduce((s: number, p: any) => s + p.amount, 0);
     const pendingTickets = tickets.filter(t => t.status === 'open' || t.status === 'OPEN').length;
+
+    // Wizard computed values
+    const pendingBookings = bookings.filter((b: any) => b.status === 'PENDING');
+    const confirmedBookings = bookings.filter((b: any) => b.status === 'CONFIRMED');
+    const wizardProperty = properties.find((p: any) => p.id === newSelectedPropertyId);
+    const wizardRooms = wizardProperty?.rooms || [];
+    const wizardRoom = wizardRooms.find((r: any) => r.id === newSelectedRoomId);
+    const wizardAvailableBeds = (wizardRoom?.beds || []).filter((b: any) => !b.isOccupied);
+    const heldNet = Math.max(0, (parseFloat(heldRentAmount) || 0) + (parseFloat(heldDepositAmount) || 0) - 500);
 
     if (authLoading || (!isLoggedIn && !authLoading)) {
         return (
@@ -748,14 +918,65 @@ export default function OwnerDashboard() {
 
                 {activeTab === 'tenants' && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <h2 style={{ fontFamily: 'Outfit', fontSize: '1.4rem', fontWeight: 700, marginBottom: 24 }}>Tenants</h2>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                            <h2 style={{ fontFamily: 'Outfit', fontSize: '1.4rem', fontWeight: 700 }}>Tenants</h2>
+                            <button className="btn-primary" onClick={openNewWizard}>
+                                <UserPlus size={16} /> Assign New Tenant
+                            </button>
+                        </div>
+
+                        {/* Pending Assignment Section */}
+                        {pendingBookings.length > 0 && (
+                            <div style={{ marginBottom: 32 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                                    <Clock size={18} style={{ color: '#FFC107' }} />
+                                    <h3 style={{ fontFamily: 'Outfit', fontSize: '1.05rem', fontWeight: 600, color: '#FFC107' }}>
+                                        Pending Assignment ({pendingBookings.length})
+                                    </h3>
+                                </div>
+                                <div style={{ border: '1px solid rgba(255,193,7,0.3)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                                    {pendingBookings.map((b: any) => (
+                                        <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px', borderBottom: '1px solid rgba(255,193,7,0.15)', background: 'rgba(255,193,7,0.04)' }}>
+                                            <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(255,193,7,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#FFC107', flexShrink: 0, fontSize: '1.1rem' }}>
+                                                {(b.tenant?.name || 'T').charAt(0)}
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{b.tenant?.name || 'Tenant'}</div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 2 }}>
+                                                    {b.tenant?.phone} • {b.room?.property?.name || '—'} • {b.room?.name || '—'}
+                                                </div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 2 }}>
+                                                    Hold fee paid ✓ ₹500 • Requested {new Date(b.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 8 }}>
+                                                <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>₹{(b.amount || 0).toLocaleString('en-IN')}/mo</div>
+                                            </div>
+                                            <button className="btn-primary" style={{ padding: '8px 16px', fontSize: '0.85rem', flexShrink: 0 }} onClick={() => openHeldWizard(b)}>
+                                                Complete Onboarding
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 8 }}>
+                                    These tenants paid the ₹500 hold fee. Complete their onboarding to confirm the bed and raise the remaining invoice.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Active Tenants Section */}
                         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Active Bookings</div>
-                            {bookings.length === 0 ? (
-                                <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>No tenants yet</div>
+                            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <CheckCircle2 size={16} style={{ color: '#51CF66' }} /> Active Tenants ({confirmedBookings.length})
+                            </div>
+                            {confirmedBookings.length === 0 ? (
+                                <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>
+                                    <div style={{ fontSize: '2rem', marginBottom: 10 }}>🏠</div>
+                                    No confirmed tenants yet
+                                </div>
                             ) : (
                                 <div>
-                                    {bookings.map((b: any) => (
+                                    {confirmedBookings.map((b: any) => (
                                         <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 24px', borderBottom: '1px solid var(--border)' }}>
                                             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'white', flexShrink: 0 }}>
                                                 {(b.tenant?.name || 'T').charAt(0)}
@@ -772,11 +993,9 @@ export default function OwnerDashboard() {
                                                     from {new Date(b.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                                                 </div>
                                             </div>
-                                            <span style={{
-                                                fontSize: '0.72rem', fontWeight: 600, padding: '3px 9px', borderRadius: 6, flexShrink: 0,
-                                                background: b.status === 'CONFIRMED' ? 'rgba(81,207,102,0.15)' : 'rgba(255,193,7,0.15)',
-                                                color: b.status === 'CONFIRMED' ? '#51CF66' : '#FFC107',
-                                            }}>{b.status}</span>
+                                            <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '3px 9px', borderRadius: 6, flexShrink: 0, background: 'rgba(81,207,102,0.15)', color: '#51CF66' }}>
+                                                CONFIRMED
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
@@ -785,6 +1004,316 @@ export default function OwnerDashboard() {
                     </motion.div>
                 )}
             </main>
+
+            {/* ── Assignment Wizard Modal ── */}
+            {showWizard && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+                    onClick={e => { if (e.target === e.currentTarget && !wizardLoading) setShowWizard(false); }}>
+                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                        className="card" style={{ maxWidth: 520, width: '100%', padding: 0, overflow: 'hidden', position: 'relative' }}>
+
+                        {/* Header */}
+                        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg-surface)' }}>
+                            <div>
+                                <h3 style={{ fontFamily: 'Outfit', fontSize: '1.15rem', fontWeight: 700 }}>
+                                    {wizardMode === 'held' ? '🔑 Complete Tenant Onboarding' : '➕ Assign New Tenant'}
+                                </h3>
+                                {!wizardSuccess && (
+                                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                                        {(wizardMode === 'held' ? [1, 2] : [1, 2, 3, 4]).map(s => (
+                                            <div key={s} style={{ height: 4, width: 36, borderRadius: 2, background: s <= wizardStep ? 'var(--primary)' : 'var(--border)' }} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            {!wizardLoading && (
+                                <button onClick={() => setShowWizard(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                                    <X size={20} />
+                                </button>
+                            )}
+                        </div>
+
+                        <div style={{ padding: 24 }}>
+                            {/* Success state */}
+                            {wizardSuccess ? (
+                                <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                                    <CheckCircle2 size={48} style={{ color: '#51CF66', margin: '0 auto 16px' }} />
+                                    <h4 style={{ fontFamily: 'Outfit', fontSize: '1.2rem', fontWeight: 700, marginBottom: 12 }}>Done!</h4>
+                                    <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>{wizardSuccess}</p>
+                                    <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setShowWizard(false); setActiveTab('tenants'); }}>
+                                        View Tenants
+                                    </button>
+                                </div>
+                            ) : wizardMode === 'held' ? (
+                                /* ── OPTION A: Held Tenant ── */
+                                <>
+                                    {wizardStep === 1 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                                            {/* Tenant info card */}
+                                            <div style={{ padding: '14px 16px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                                                <div style={{ fontWeight: 600, marginBottom: 4 }}>{selectedPendingBooking?.tenant?.name}</div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{selectedPendingBooking?.tenant?.phone}</div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 4 }}>
+                                                    {selectedPendingBooking?.room?.property?.name} · {selectedPendingBooking?.room?.name}
+                                                </div>
+                                                <div style={{ marginTop: 8, fontSize: '0.8rem', color: '#51CF66', fontWeight: 600 }}>
+                                                    ✓ Hold fee paid: ₹500
+                                                </div>
+                                            </div>
+
+                                            {/* Payment details */}
+                                            <div>
+                                                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Monthly Rent (₹) *</label>
+                                                <input className="input" type="number" placeholder="e.g. 12000" value={heldRentAmount} onChange={e => setHeldRentAmount(e.target.value)} />
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Security Deposit (₹)</label>
+                                                <input className="input" type="number" placeholder="e.g. 24000" value={heldDepositAmount} onChange={e => setHeldDepositAmount(e.target.value)} />
+                                            </div>
+
+                                            <div style={{ padding: '12px 16px', background: 'rgba(108,92,231,0.08)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(108,92,231,0.2)', fontSize: '0.85rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>Rent + Deposit</span>
+                                                    <span>₹{((parseFloat(heldRentAmount) || 0) + (parseFloat(heldDepositAmount) || 0)).toLocaleString('en-IN')}</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                                    <span style={{ color: 'var(--text-muted)' }}>Hold fee already paid</span>
+                                                    <span style={{ color: '#51CF66' }}>−₹500</span>
+                                                </div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                                                    <span>Net amount due</span>
+                                                    <span style={{ color: 'var(--primary-light)' }}>₹{heldNet.toLocaleString('en-IN')}</span>
+                                                </div>
+                                            </div>
+
+                                            {wizardError && <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>{wizardError}</div>}
+                                            <button className="btn-primary" style={{ justifyContent: 'center', padding: '13px' }} onClick={() => { setWizardError(''); setWizardStep(2); }} disabled={!heldRentAmount}>
+                                                Next: Choose Payment Method →
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {wizardStep === 2 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+                                            <div>
+                                                <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 12 }}>Collection Method</label>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                    {(['LINK', 'CASH'] as const).map(m => (
+                                                        <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderRadius: 'var(--radius-sm)', border: `1px solid ${heldPaymentMethod === m ? 'var(--primary)' : 'var(--border)'}`, background: heldPaymentMethod === m ? 'rgba(108,92,231,0.08)' : 'var(--bg-surface)', cursor: 'pointer' }}>
+                                                            <input type="radio" checked={heldPaymentMethod === m} onChange={() => setHeldPaymentMethod(m)} style={{ marginTop: 2 }} />
+                                                            <div>
+                                                                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{m === 'LINK' ? '🔗 Online Payment Link' : '💵 Collect Cash'}</div>
+                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 3 }}>
+                                                                    {m === 'LINK' ? 'Tenant sees a payment request in their dashboard and pays via Razorpay' : 'Record cash as received immediately in both ledgers'}
+                                                                </div>
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {parseFloat(heldDepositAmount) > 0 && (
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                                                    <input type="checkbox" checked={heldSplitPayment} onChange={e => setHeldSplitPayment(e.target.checked)} />
+                                                    <div>
+                                                        <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>Split into 2 invoices</div>
+                                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Separate deposit (₹{parseFloat(heldDepositAmount).toLocaleString('en-IN')}) + rent (₹{Math.max(0, parseFloat(heldRentAmount) - 500).toLocaleString('en-IN')}) invoices</div>
+                                                    </div>
+                                                </label>
+                                            )}
+
+                                            <div style={{ padding: '12px 16px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', fontSize: '0.85rem' }}>
+                                                <div style={{ fontWeight: 600, marginBottom: 8 }}>Summary</div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Tenant: {selectedPendingBooking?.tenant?.name}</div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Net amount to collect: ₹{heldNet.toLocaleString('en-IN')}</div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Method: {heldPaymentMethod === 'CASH' ? 'Cash' : 'Online link'}</div>
+                                            </div>
+
+                                            {wizardError && <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>{wizardError}</div>}
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                <button className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setWizardStep(1)}>← Back</button>
+                                                <button className="btn-primary" style={{ flex: 2, justifyContent: 'center', gap: 8 }} onClick={confirmHeldTenant} disabled={wizardLoading}>
+                                                    {wizardLoading ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : '✓ Confirm Booking'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                /* ── OPTION B: New Tenant ── */
+                                <>
+                                    {wizardStep === 1 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Enter the tenant&apos;s phone number. If they have a CoLife account, their details will be auto-filled.</p>
+                                            <div>
+                                                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Phone Number *</label>
+                                                <div style={{ display: 'flex', gap: 8 }}>
+                                                    <input className="input" placeholder="+91 9876543210" value={newPhone} onChange={e => setNewPhone(e.target.value)} onKeyDown={e => e.key === 'Enter' && lookupTenant()} style={{ flex: 1 }} />
+                                                    <button className="btn-secondary" style={{ padding: '10px 16px', flexShrink: 0 }} onClick={lookupTenant} disabled={!newPhone || wizardLoading}>
+                                                        {wizardLoading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {wizardError && <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>{wizardError}</div>}
+                                            <button className="btn-primary" style={{ justifyContent: 'center', padding: '13px' }} onClick={lookupTenant} disabled={!newPhone || wizardLoading}>
+                                                {wizardLoading ? <><Loader2 size={16} className="animate-spin" /> Looking up...</> : 'Continue →'}
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {wizardStep === 2 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                            {newFoundUser ? (
+                                                <div style={{ padding: '12px 14px', background: 'rgba(81,207,102,0.08)', border: '1px solid rgba(81,207,102,0.3)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: '#51CF66' }}>
+                                                    ✓ Existing CoLife user found — details pre-filled
+                                                </div>
+                                            ) : (
+                                                <div style={{ padding: '12px 14px', background: 'rgba(108,92,231,0.08)', border: '1px solid rgba(108,92,231,0.2)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem', color: 'var(--primary-light)' }}>
+                                                    No account found — a new tenant account will be created
+                                                </div>
+                                            )}
+                                            <div>
+                                                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Full Name *</label>
+                                                <input className="input" value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Ravi Kumar" />
+                                            </div>
+                                            <div>
+                                                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Email</label>
+                                                <input className="input" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="ravi@example.com" />
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Gender</label>
+                                                    <select className="input" value={newGender} onChange={e => setNewGender(e.target.value)}>
+                                                        <option value="">Select</option>
+                                                        <option value="Male">Male</option>
+                                                        <option value="Female">Female</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Aadhaar (optional)</label>
+                                                    <input className="input" value={newAadhaar} onChange={e => setNewAadhaar(e.target.value)} placeholder="1234 5678 9012" />
+                                                </div>
+                                            </div>
+                                            {wizardError && <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>{wizardError}</div>}
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                <button className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setWizardStep(1)}>← Back</button>
+                                                <button className="btn-primary" style={{ flex: 2, justifyContent: 'center' }} onClick={() => { setWizardStep(3); setWizardError(''); }} disabled={!newName}>Next →</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {wizardStep === 3 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                            <div>
+                                                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Property *</label>
+                                                <select className="input" value={newSelectedPropertyId} onChange={e => { setNewSelectedPropertyId(e.target.value); setNewSelectedRoomId(''); setNewSelectedBedId(''); }}>
+                                                    <option value="">Select property</option>
+                                                    {properties.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                </select>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Room *</label>
+                                                    <select className="input" value={newSelectedRoomId} onChange={e => { setNewSelectedRoomId(e.target.value); setNewSelectedBedId(''); const rm = wizardRooms.find((r: any) => r.id === e.target.value); if (rm) setNewRent(String(rm.price || '')); }}>
+                                                        <option value="">Select room</option>
+                                                        {wizardRooms.map((r: any) => <option key={r.id} value={r.id}>{r.name} ({r.type})</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Bed *</label>
+                                                    <select className="input" value={newSelectedBedId} onChange={e => setNewSelectedBedId(e.target.value)}>
+                                                        <option value="">Select bed</option>
+                                                        {wizardAvailableBeds.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                    </select>
+                                                    {newSelectedRoomId && wizardAvailableBeds.length === 0 && <div style={{ fontSize: '0.75rem', color: 'var(--accent)', marginTop: 4 }}>No available beds in this room</div>}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Monthly Rent (₹) *</label>
+                                                    <input className="input" type="number" value={newRent} onChange={e => setNewRent(e.target.value)} placeholder="12000" />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Security Deposit (₹)</label>
+                                                    <input className="input" type="number" value={newDeposit} onChange={e => setNewDeposit(e.target.value)} placeholder="24000" />
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Move-in Date *</label>
+                                                    <input className="input" type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', display: 'block', marginBottom: 5 }}>Lock-in Period</label>
+                                                    <select className="input" value={newLockIn} onChange={e => setNewLockIn(e.target.value)}>
+                                                        <option value="1 month">1 Month</option>
+                                                        <option value="3 months">3 Months</option>
+                                                        <option value="6 months">6 Months</option>
+                                                        <option value="12 months">12 Months</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            {wizardError && <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>{wizardError}</div>}
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                <button className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setWizardStep(2)}>← Back</button>
+                                                <button className="btn-primary" style={{ flex: 2, justifyContent: 'center' }} onClick={() => { setWizardError(''); setWizardStep(4); }} disabled={!newSelectedBedId || !newRent || !newStartDate}>Next →</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {wizardStep === 4 && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                            <div>
+                                                <label style={{ fontSize: '0.85rem', fontWeight: 600, display: 'block', marginBottom: 12 }}>Collection Method</label>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                                    {(['LINK', 'CASH'] as const).map(m => (
+                                                        <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 16px', borderRadius: 'var(--radius-sm)', border: `1px solid ${newPaymentMethod === m ? 'var(--primary)' : 'var(--border)'}`, background: newPaymentMethod === m ? 'rgba(108,92,231,0.08)' : 'var(--bg-surface)', cursor: 'pointer' }}>
+                                                            <input type="radio" checked={newPaymentMethod === m} onChange={() => setNewPaymentMethod(m)} style={{ marginTop: 2 }} />
+                                                            <div>
+                                                                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{m === 'LINK' ? '🔗 Online Payment Link' : '💵 Collect Cash'}</div>
+                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 3 }}>
+                                                                    {m === 'LINK' ? 'Tenant pays from their dashboard via Razorpay' : 'Mark as received immediately'}
+                                                                </div>
+                                                            </div>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {parseFloat(newDeposit) > 0 && (
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                                                    <input type="checkbox" checked={newSplitPayment} onChange={e => setNewSplitPayment(e.target.checked)} />
+                                                    <div>
+                                                        <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>Split into 2 invoices</div>
+                                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Separate deposit (₹{parseFloat(newDeposit).toLocaleString('en-IN')}) + first rent (₹{parseFloat(newRent || '0').toLocaleString('en-IN')}) invoices</div>
+                                                    </div>
+                                                </label>
+                                            )}
+
+                                            <div style={{ padding: '12px 16px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                <div style={{ fontWeight: 600, marginBottom: 4 }}>Summary</div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Tenant: <span style={{ color: 'white' }}>{newName} ({newPhone})</span></div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Bed: <span style={{ color: 'white' }}>{wizardRoom?.name} → {wizardAvailableBeds.find((b: any) => b.id === newSelectedBedId)?.name}</span></div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Total to collect: <span style={{ color: 'var(--primary-light)', fontWeight: 700 }}>₹{((parseFloat(newRent) || 0) + (parseFloat(newDeposit) || 0)).toLocaleString('en-IN')}</span></div>
+                                                <div style={{ color: 'var(--text-muted)' }}>Move-in: {newStartDate}</div>
+                                            </div>
+
+                                            {wizardError && <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>{wizardError}</div>}
+                                            <div style={{ display: 'flex', gap: 10 }}>
+                                                <button className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setWizardStep(3)}>← Back</button>
+                                                <button className="btn-primary" style={{ flex: 2, justifyContent: 'center', gap: 8 }} onClick={confirmNewTenant} disabled={wizardLoading}>
+                                                    {wizardLoading ? <><Loader2 size={16} className="animate-spin" /> Assigning...</> : '✓ Assign Tenant'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 }

@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                             include: {
                                 bookings: {
                                     where: {
-                                        status: 'CONFIRMED',
+                                        status: { in: ['CONFIRMED', 'PENDING'] },
                                     },
                                     include: {
                                         tenant: {
