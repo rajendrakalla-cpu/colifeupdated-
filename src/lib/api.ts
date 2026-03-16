@@ -75,6 +75,8 @@ export const propertiesApi = {
 // ─── Bookings API ───
 export const bookingsApi = {
     create: (data: any) => api.post<any>('/api/v1/bookings', data),
+    initiate: (data: { propertyId: string; moveInDate?: string }) =>
+        api.post<any>('/api/v1/bookings/initiate', data),
     getAll: () => api.get<{ bookings: any[] }>('/api/v1/bookings'),
     getById: (id: string) => api.get<any>(`/api/v1/bookings/${id}`),
     confirm: (id: string) => api.patch<any>(`/api/v1/bookings/${id}/confirm`),

@@ -3,14 +3,16 @@
 import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { useRouter } from 'next/navigation';
 import {
-    Star, MapPin, Users, ArrowLeft, CheckCircle2, Calendar,
+    Star, MapPin, ArrowLeft, CheckCircle2, Calendar,
     Shield, Phone, MessageCircle, Heart, Share2, ChevronRight,
-    Wifi, Snowflake, Dumbbell, UtensilsCrossed, ShieldCheck,
-    Zap, Car, Camera, Gamepad2, BookOpen, Laptop, Waves
+    Wifi, Snowflake, Dumbbell, UtensilsCrossed,
+    Zap, Car, Camera, Gamepad2, BookOpen, Laptop, Waves, X, Loader2
 } from 'lucide-react';
-import { properties as mockProperties, amenityIcons } from '@/lib/data';
-import { propertiesApi } from '@/lib/api';
+import { properties as mockProperties } from '@/lib/data';
+import { propertiesApi, bookingsApi, ticketsApi } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import RecommendationsSection from '@/components/RecommendationsSection';
 
 const amenityFullIcons: Record<string, React.ReactNode> = {
@@ -30,10 +32,120 @@ const amenityFullIcons: Record<string, React.ReactNode> = {
     'Study Room': <BookOpen size={20} />,
 };
 
+// Load Razorpay script once
+function loadRazorpay(): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if ((window as any).Razorpay) return resolve();
+        const s = document.createElement('script');
+        s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Failed to load Razorpay'));
+        document.body.appendChild(s);
+    });
+}
+
 export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
+    const router = useRouter();
+    const { user, isLoggedIn } = useAuth();
     const [property, setProperty] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [moveInDate, setMoveInDate] = useState('');
+
+    // Booking modal state
+    const [showBookModal, setShowBookModal] = useState(false);
+    const [bookLoading, setBookLoading] = useState(false);
+    const [bookError, setBookError] = useState('');
+    const [bookSuccess, setBookSuccess] = useState('');
+
+    // Visit modal state
+    const [showVisitModal, setShowVisitModal] = useState(false);
+    const [visitDate, setVisitDate] = useState('');
+    const [visitTime, setVisitTime] = useState('');
+    const [visitLoading, setVisitLoading] = useState(false);
+    const [visitSuccess, setVisitSuccess] = useState('');
+
+    const redirectToLogin = () => {
+        router.push(`/auth/login?redirect=/properties/${id}`);
+    };
+
+    const handleBookNow = () => {
+        if (!isLoggedIn) return redirectToLogin();
+        if (user?.role && user.role !== 'TENANT') {
+            alert('Please log in as a tenant to book a room.');
+            return;
+        }
+        setBookError('');
+        setBookSuccess('');
+        setShowBookModal(true);
+    };
+
+    const handleConfirmBooking = async () => {
+        setBookLoading(true);
+        setBookError('');
+        try {
+            await loadRazorpay();
+            const res = await bookingsApi.initiate({ propertyId: id, moveInDate: moveInDate || undefined });
+            const options = {
+                key: res.keyId,
+                amount: res.amount,
+                currency: res.currency,
+                name: 'CoLife',
+                description: `Hold fee for ${res.propertyName}`,
+                order_id: res.orderId,
+                prefill: res.prefill,
+                theme: { color: '#6C5CE7' },
+                handler: () => {
+                    setBookSuccess('Booking confirmed! ₹500 hold fee paid. Check your dashboard for details.');
+                    setBookLoading(false);
+                },
+                modal: {
+                    ondismiss: () => setBookLoading(false),
+                },
+            };
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on('payment.failed', () => {
+                setBookError('Payment failed. Please try again.');
+                setBookLoading(false);
+            });
+            rzp.open();
+        } catch (err: any) {
+            setBookError(err.message || 'Failed to initiate booking. Please try again.');
+            setBookLoading(false);
+        }
+    };
+
+    const handleScheduleVisit = () => {
+        if (!isLoggedIn) return redirectToLogin();
+        setVisitSuccess('');
+        setShowVisitModal(true);
+    };
+
+    const handleConfirmVisit = async () => {
+        if (!visitDate) return;
+        setVisitLoading(true);
+        try {
+            await ticketsApi.create({
+                title: `Visit Request — ${property?.name}`,
+                description: `Preferred visit: ${visitDate}${visitTime ? ' at ' + visitTime : ''}`,
+                category: 'other',
+                priority: 'medium',
+                propertyId: id,
+            });
+            setVisitSuccess(`Visit scheduled for ${visitDate}${visitTime ? ' at ' + visitTime : ''}. The property manager will confirm shortly.`);
+        } catch {
+            setVisitSuccess('Visit request sent! The property manager will contact you to confirm.');
+        } finally {
+            setVisitLoading(false);
+        }
+    };
+
+    const handleChatWithManager = () => {
+        if (!isLoggedIn) return redirectToLogin();
+        if (property?.manager?.phone) {
+            window.open(`https://wa.me/${property.manager.phone.replace(/[^0-9]/g, '')}`, '_blank');
+        }
+    };
 
     useEffect(() => {
         const fetchProperty = async () => {
@@ -348,23 +460,42 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                                     </label>
                                     <div style={{ position: 'relative' }}>
                                         <Calendar size={16} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                                        <input type="date" className="input" style={{ paddingLeft: 40 }} />
+                                        <input
+                                            type="date"
+                                            className="input"
+                                            style={{ paddingLeft: 40 }}
+                                            value={moveInDate}
+                                            min={new Date().toISOString().split('T')[0]}
+                                            onChange={e => setMoveInDate(e.target.value)}
+                                        />
                                     </div>
                                 </div>
 
                                 {/* CTA */}
-                                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '1rem' }}>
-                                    Book Now — ₹500 Hold Fee
+                                <button
+                                    className="btn-primary"
+                                    style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '1rem' }}
+                                    onClick={handleBookNow}
+                                >
+                                    {isLoggedIn ? 'Book Now — ₹500 Hold Fee' : 'Login to Book'}
                                 </button>
                                 <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 8 }}>
                                     Fully refundable • Room locked for 15 minutes
                                 </p>
 
                                 <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 20 }}>
-                                    <button className="btn-secondary" style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }}>
-                                        <Calendar size={16} /> Schedule Visit
+                                    <button
+                                        className="btn-secondary"
+                                        style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }}
+                                        onClick={handleScheduleVisit}
+                                    >
+                                        <Calendar size={16} /> {isLoggedIn ? 'Schedule Visit' : 'Login to Schedule'}
                                     </button>
-                                    <button className="btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
+                                    <button
+                                        className="btn-ghost"
+                                        style={{ width: '100%', justifyContent: 'center' }}
+                                        onClick={handleChatWithManager}
+                                    >
                                         <MessageCircle size={16} /> Chat with Manager
                                     </button>
                                 </div>
@@ -423,6 +554,144 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           }
         }
       `}</style>
+
+            {/* ── Booking Modal ── */}
+            {showBookModal && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+                }} onClick={e => { if (e.target === e.currentTarget && !bookLoading) setShowBookModal(false); }}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="card"
+                        style={{ maxWidth: 460, width: '100%', padding: 32, position: 'relative' }}
+                    >
+                        {!bookLoading && !bookSuccess && (
+                            <button onClick={() => setShowBookModal(false)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                                <X size={20} />
+                            </button>
+                        )}
+                        {bookSuccess ? (
+                            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                                <CheckCircle2 size={48} style={{ color: 'var(--secondary)', margin: '0 auto 16px' }} />
+                                <h3 style={{ fontFamily: 'Outfit', fontSize: '1.3rem', fontWeight: 700, marginBottom: 12 }}>Booking Confirmed!</h3>
+                                <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>{bookSuccess}</p>
+                                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => { setShowBookModal(false); router.push('/dashboard/tenant'); }}>
+                                    Go to My Dashboard
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 style={{ fontFamily: 'Outfit', fontSize: '1.3rem', fontWeight: 700, marginBottom: 8 }}>Confirm Booking</h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 24 }}>{property?.name}</p>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 24 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Monthly Rent</span>
+                                        <span style={{ fontWeight: 600 }}>₹{(property?.price || 0).toLocaleString('en-IN')}/mo</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Move-in Date</span>
+                                        <span style={{ fontWeight: 600 }}>{moveInDate || 'Earliest available'}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0' }}>
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Hold Fee (refundable)</span>
+                                        <span style={{ fontWeight: 700, color: 'var(--primary-light)' }}>₹500</span>
+                                    </div>
+                                </div>
+
+                                {bookError && (
+                                    <div style={{ padding: '10px 14px', marginBottom: 16, borderRadius: 8, background: 'rgba(253,121,168,0.1)', border: '1px solid rgba(253,121,168,0.3)', color: 'var(--accent)', fontSize: '0.85rem' }}>
+                                        {bookError}
+                                    </div>
+                                )}
+
+                                <button
+                                    className="btn-primary"
+                                    style={{ width: '100%', justifyContent: 'center', padding: '14px', gap: 8 }}
+                                    onClick={handleConfirmBooking}
+                                    disabled={bookLoading}
+                                >
+                                    {bookLoading ? <><Loader2 size={16} className="animate-spin" /> Processing...</> : 'Pay ₹500 & Confirm Booking'}
+                                </button>
+                                <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: 8 }}>
+                                    Fully refundable if you cancel within 24 hours
+                                </p>
+                            </>
+                        )}
+                    </motion.div>
+                </div>
+            )}
+
+            {/* ── Schedule Visit Modal ── */}
+            {showVisitModal && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+                }} onClick={e => { if (e.target === e.currentTarget && !visitLoading) setShowVisitModal(false); }}>
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="card"
+                        style={{ maxWidth: 440, width: '100%', padding: 32, position: 'relative' }}
+                    >
+                        {!visitLoading && !visitSuccess && (
+                            <button onClick={() => setShowVisitModal(false)} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                                <X size={20} />
+                            </button>
+                        )}
+                        {visitSuccess ? (
+                            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                                <CheckCircle2 size={48} style={{ color: 'var(--secondary)', margin: '0 auto 16px' }} />
+                                <h3 style={{ fontFamily: 'Outfit', fontSize: '1.3rem', fontWeight: 700, marginBottom: 12 }}>Visit Scheduled!</h3>
+                                <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>{visitSuccess}</p>
+                                <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowVisitModal(false)}>
+                                    Done
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <h3 style={{ fontFamily: 'Outfit', fontSize: '1.3rem', fontWeight: 700, marginBottom: 8 }}>Schedule a Visit</h3>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: 24 }}>{property?.name}</p>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: 8 }}>Preferred Date</label>
+                                        <input
+                                            type="date"
+                                            className="input"
+                                            value={visitDate}
+                                            min={new Date().toISOString().split('T')[0]}
+                                            onChange={e => setVisitDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500, display: 'block', marginBottom: 8 }}>Preferred Time (optional)</label>
+                                        <input
+                                            type="time"
+                                            className="input"
+                                            value={visitTime}
+                                            onChange={e => setVisitTime(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    className="btn-primary"
+                                    style={{ width: '100%', justifyContent: 'center', padding: '14px', gap: 8 }}
+                                    onClick={handleConfirmVisit}
+                                    disabled={!visitDate || visitLoading}
+                                >
+                                    {visitLoading ? <><Loader2 size={16} className="animate-spin" /> Scheduling...</> : 'Confirm Visit'}
+                                </button>
+                            </>
+                        )}
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 }
