@@ -17,7 +17,7 @@ export async function POST(request: Request) {
         try {
             decoded = await verifyFirebaseToken(firebaseIdToken);
         } catch (tokenErr: any) {
-            console.error('[verify-otp] Firebase token verification failed:', tokenErr?.message ?? tokenErr);
+            console.error('[verify-otp] Firebase token verification failed:', tokenErr?.message ?? tokenErr, '| PROJECT_ID:', process.env.FIREBASE_PROJECT_ID ?? process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'colife-17952(fallback)');
             return NextResponse.json({ error: 'Invalid or expired OTP verification' }, { status: 401 });
         }
 
