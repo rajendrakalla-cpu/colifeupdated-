@@ -11,7 +11,7 @@ import {
     Zap, Car, Camera, Gamepad2, BookOpen, Laptop, Waves, X, Loader2
 } from 'lucide-react';
 import { properties as mockProperties } from '@/lib/data';
-import { propertiesApi, bookingsApi, ticketsApi } from '@/lib/api';
+import { propertiesApi, bookingsApi, ticketsApi, paymentsApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import RecommendationsSection from '@/components/RecommendationsSection';
 
@@ -95,7 +95,15 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                 order_id: res.orderId,
                 prefill: res.prefill,
                 theme: { color: '#6C5CE7' },
-                handler: () => {
+                handler: async (response: any) => {
+                    try {
+                        await paymentsApi.verify({
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                            paymentId: res.paymentId,
+                        });
+                    } catch { /* logged server-side */ }
                     setBookSuccess('Booking confirmed! ₹500 hold fee paid. Check your dashboard for details.');
                     setBookLoading(false);
                 },

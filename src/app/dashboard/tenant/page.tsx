@@ -122,9 +122,16 @@ export default function TenantDashboard() {
                 order_id: orderRes.orderId,
                 prefill: orderRes.prefill,
                 theme: { color: "#6C5CE7" },
-                handler: function (response: any) {
-                    alert(`Payment successful! Reference: ${response.razorpay_payment_id}`);
-                    setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'CAPTURED' } : p));
+                handler: async function (response: any) {
+                    try {
+                        await paymentsApi.verify({
+                            razorpayOrderId: response.razorpay_order_id,
+                            razorpayPaymentId: response.razorpay_payment_id,
+                            razorpaySignature: response.razorpay_signature,
+                            paymentId,
+                        });
+                    } catch { /* verification failure is logged server-side */ }
+                    setPayments(prev => prev.map(p => p.id === paymentId ? { ...p, status: 'CAPTURED', razorpayPaymentId: response.razorpay_payment_id } : p));
                 },
             };
 

@@ -1,0 +1,26 @@
+{
+  "tenant": {
+    "id": "c2ebd872-5194-4dc4-802c-d60c6eeca100",
+    "token": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiJjMmViZDg3Mi01MTk0LTRkYzQtODAyYy1kNjBjNmVlY2ExMDAiLCJlbWFpbCI6InRlc3QudGVuYW50QGNvbGlmZS50ZXN0Iiwicm9sZSI6IlRFTkFOVCIsImlhdCI6MTc3MzY4NjEwNiwiZXhwIjoxNzc0MjkwOTA2fQ.VmU5dDIJ13aPclNmFkh5-wjmaA2MdAeZqvuLhMWZVls",
+    "phone": "+910000000001"
+  },
+  "owner": {
+    "id": "e5325d48-f4be-42da-8c71-7da8273a9d70",
+    "token": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiJlNTMyNWQ0OC1mNGJlLTQyZGEtOGM3MS03ZGE4MjczYTlkNzAiLCJlbWFpbCI6InRlc3Qub3duZXJAY29saWZlLnRlc3QiLCJyb2xlIjoiT1dORVIiLCJpYXQiOjE3NzM2ODYxMDYsImV4cCI6MTc3NDI5MDkwNn0.x0tiXRP78XcrCzqFwoTSjzsbQElZ6y_CPW45hok1Gd8",
+    "phone": "+910000000002"
+  },
+  "admin": {
+    "id": "27cf3bd8-cb5f-4a59-aaa2-16dcb413ca97",
+    "token": "eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiIyN2NmM2JkOC1jYjVmLTRhNTktYWFhMi0xNmRjYjQxM2NhOTciLCJlbWFpbCI6InRlc3QuYWRtaW5AY29saWZlLnRlc3QiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3NzM2ODYxMDYsImV4cCI6MTc3NDI5MDkwNn0.HPhkUS2KH4V2qbX5Rw7I4RhKKLMhS9Q9t02Qn-E3CV4",
+    "phone": "+910000000003"
+  },
+  "property": {
+    "id": "test-property-e2e-id-00000001"
+  },
+  "room": {
+    "id": "test-room-e2e-id-000000001"
+  },
+  "bed": {
+    "id": "test-bed-e2e-id-0000000001"
+  }
+}

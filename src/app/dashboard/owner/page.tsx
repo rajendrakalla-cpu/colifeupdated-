@@ -26,6 +26,8 @@ export default function OwnerDashboard() {
     const [activeTab, setActiveTab] = useState('overview');
     const [properties, setProperties] = useState<any[]>([]);
     const [tickets, setTickets] = useState<any[]>([]);
+    const [payments, setPayments] = useState<any[]>([]);
+    const [bookings, setBookings] = useState<any[]>([]);
     const [dataLoading, setDataLoading] = useState(true);
 
     // Add Property form state
@@ -125,9 +127,11 @@ export default function OwnerDashboard() {
         if (!isLoggedIn) return;
         const fetchData = async () => {
             try {
-                const [propsRes, ticketsRes] = await Promise.allSettled([
+                const [propsRes, ticketsRes, paymentsRes, bookingsRes] = await Promise.allSettled([
                     propertiesApi.search(),
                     ticketsApi.getAll(),
+                    paymentsApi.getHistory(),
+                    bookingsApi.getAll(),
                 ]);
                 if (propsRes.status === 'fulfilled') {
                     const p = (propsRes.value as any)?.properties || (propsRes.value as any) || [];
@@ -136,6 +140,14 @@ export default function OwnerDashboard() {
                 if (ticketsRes.status === 'fulfilled') {
                     const t = (ticketsRes.value as any)?.tickets || (ticketsRes.value as any) || [];
                     setTickets(Array.isArray(t) ? t : []);
+                }
+                if (paymentsRes.status === 'fulfilled') {
+                    const py = (paymentsRes.value as any)?.payments || [];
+                    setPayments(Array.isArray(py) ? py : []);
+                }
+                if (bookingsRes.status === 'fulfilled') {
+                    const bk = (bookingsRes.value as any)?.bookings || [];
+                    setBookings(Array.isArray(bk) ? bk : []);
                 }
             } catch { /* silent */ } finally {
                 setDataLoading(false);
@@ -159,11 +171,11 @@ export default function OwnerDashboard() {
         return `₹${n.toLocaleString('en-IN')}`;
     };
 
-    const totalBeds = properties.length * 12;
-    const occupiedBeds = Math.round(totalBeds * 0.87);
+    const totalBeds = properties.reduce((s: number, p: any) => s + (p.totalBeds || 0), 0);
+    const occupiedBeds = properties.reduce((s: number, p: any) => s + (p.occupiedBeds || 0), 0);
     const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-    const monthlyRevenue = properties.length * 285000;
-    const pendingTickets = tickets.filter(t => t.status === 'open').length;
+    const monthlyRevenue = payments.filter(p => p.status === 'CAPTURED').reduce((s: number, p: any) => s + p.amount, 0);
+    const pendingTickets = tickets.filter(t => t.status === 'open' || t.status === 'OPEN').length;
 
     if (authLoading || (!isLoggedIn && !authLoading)) {
         return (
@@ -685,17 +697,91 @@ export default function OwnerDashboard() {
                     </motion.div>
                 )}
 
-                {(activeTab === 'revenue' || activeTab === 'tenants') && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '80px 24px' }}>
-                        <div style={{ fontSize: '4rem', marginBottom: 20 }}>
-                            {activeTab === 'revenue' ? '📊' : '👥'}
+                {activeTab === 'revenue' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <h2 style={{ fontFamily: 'Outfit', fontSize: '1.4rem', fontWeight: 700, marginBottom: 24 }}>Revenue</h2>
+
+                        {/* Summary cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 32 }}>
+                            {[
+                                { label: 'Total Collected', value: formatINR(payments.filter(p => p.status === 'CAPTURED').reduce((s: number, p: any) => s + p.amount, 0)), color: 'var(--secondary)' },
+                                { label: 'Pending', value: formatINR(payments.filter(p => p.status === 'PENDING').reduce((s: number, p: any) => s + p.amount, 0)), color: '#FFC107' },
+                                { label: 'Total Transactions', value: payments.length.toString(), color: 'var(--primary-light)' },
+                            ].map(card => (
+                                <div key={card.label} className="card" style={{ padding: '20px 24px' }}>
+                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: 500, marginBottom: 8 }}>{card.label}</div>
+                                    <div style={{ fontFamily: 'Outfit', fontSize: '1.5rem', fontWeight: 700, color: card.color }}>{card.value}</div>
+                                </div>
+                            ))}
                         </div>
-                        <h2 style={{ fontFamily: 'Outfit', fontSize: '1.5rem', fontWeight: 700, marginBottom: 8 }}>
-                            {activeTab === 'revenue' ? 'Revenue Analytics' : 'Tenant Management'}
-                        </h2>
-                        <p style={{ color: 'var(--text-muted)' }}>
-                            This module is coming soon. Stay tuned!
-                        </p>
+
+                        {/* Payment ledger */}
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Payment Ledger</div>
+                            {payments.length === 0 ? (
+                                <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>No payments yet</div>
+                            ) : (
+                                <div>
+                                    {payments.map((p: any) => (
+                                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 24px', borderBottom: '1px solid var(--border)', gap: 12 }}>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: 500, fontSize: '0.9rem', marginBottom: 2 }}>{p.tenant?.name || 'Tenant'}</div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                    {p.booking?.room?.property?.name || '—'} • {p.invoiceType?.replace('_', ' ')} • {new Date(p.dueDate || p.createdAt).toLocaleDateString('en-IN')}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>₹{(p.amount || 0).toLocaleString('en-IN')}</div>
+                                                <span style={{
+                                                    fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                                                    background: p.status === 'CAPTURED' ? 'rgba(81,207,102,0.15)' : p.status === 'PENDING' ? 'rgba(255,193,7,0.15)' : 'rgba(253,121,168,0.15)',
+                                                    color: p.status === 'CAPTURED' ? '#51CF66' : p.status === 'PENDING' ? '#FFC107' : '#FD79A8',
+                                                }}>{p.status}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </motion.div>
+                )}
+
+                {activeTab === 'tenants' && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <h2 style={{ fontFamily: 'Outfit', fontSize: '1.4rem', fontWeight: 700, marginBottom: 24 }}>Tenants</h2>
+                        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', fontWeight: 600 }}>Active Bookings</div>
+                            {bookings.length === 0 ? (
+                                <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>No tenants yet</div>
+                            ) : (
+                                <div>
+                                    {bookings.map((b: any) => (
+                                        <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 24px', borderBottom: '1px solid var(--border)' }}>
+                                            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: 'white', flexShrink: 0 }}>
+                                                {(b.tenant?.name || 'T').charAt(0)}
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{b.tenant?.name || 'Tenant'}</div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                    {b.tenant?.phone} • {b.room?.property?.name || '—'} • {b.room?.name || '—'}
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>₹{(b.amount || 0).toLocaleString('en-IN')}/mo</div>
+                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                                                    from {new Date(b.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                                                </div>
+                                            </div>
+                                            <span style={{
+                                                fontSize: '0.72rem', fontWeight: 600, padding: '3px 9px', borderRadius: 6, flexShrink: 0,
+                                                background: b.status === 'CONFIRMED' ? 'rgba(81,207,102,0.15)' : 'rgba(255,193,7,0.15)',
+                                                color: b.status === 'CONFIRMED' ? '#51CF66' : '#FFC107',
+                                            }}>{b.status}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </motion.div>
                 )}
             </main>
