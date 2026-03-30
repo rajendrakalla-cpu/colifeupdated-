@@ -3,6 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import Providers from "./providers";
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   title: "CoLife — India's Smartest Co-Living Platform",
@@ -25,6 +26,7 @@ export default function RootLayout({
           </main>
           <Footer />
         </Providers>
+        <Analytics />
       </body>
     </html>
   );
